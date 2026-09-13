@@ -1,0 +1,14 @@
+{"areaId":"agent","roomId":"liu-kanshan","sender":"LiuKan","text":"你好","timestamp":"2026-09-12T15:05:31.113Z"}
+{"areaId":"agent","roomId":"liu-kanshan","sender":"刘看山","text":"你好呀，我是看山，知乎公寓的向导北极狐。想上 5 层以上，得先凑齐“求知”和“求真”两枚印章，去解 101 知识穹顶的封。先别急，我陪你一步步来。","timestamp":"2026-09-12T15:05:32.614Z"}
+{"areaId":"agent","roomId":"liu-kanshan","sender":"LiuKan","text":"怎么凑呀","timestamp":"2026-09-12T15:05:42.581Z"}
+{"areaId":"agent","roomId":"liu-kanshan","sender":"刘看山","text":"先去 1 层 2 号房找 Atlas，问出 Nova 的暗语；再拿暗语去 1 层 7 号房找 Nova，换“求知印章”。之后上 5 层 4 号房找 Raven，过三道谜题拿“求真印章”。靠近门按 E 就行，慢慢来，我在这儿等你。","timestamp":"2026-09-12T15:05:44.020Z"}
+{"areaId":"agent","roomId":"liu-kanshan","sender":"LiuKan","text":"haode","timestamp":"2026-09-12T15:05:48.572Z"}
+{"areaId":"agent","roomId":"liu-kanshan","sender":"刘看山","text":"好，去吧。记得靠近门按 E 交互，迷路了就回来找我。凑齐两枚印章，我送你上 5 层以上的通行卡。","timestamp":"2026-09-12T15:05:49.178Z"}
+{"areaId":"agent","roomId":"liu-kanshan","sender":"LiuKan","text":"我拿到一个印章了，然后呢","timestamp":"2026-09-12T15:08:00.193Z"}
+{"areaId":"agent","roomId":"liu-kanshan","sender":"刘看山","text":"拿到“求知”就够啦，它会被 Raven 消耗，不用再找第二枚。现在上 5 层 4 号房找 Raven，过三道谜题拿“求真印章”。楼梯间按 E 上楼，加油，我看好你。","timestamp":"2026-09-12T15:08:01.025Z"}
+{"areaId":"agent","roomId":"liu-kanshan","sender":"LiuKan","text":"我该怎么把印章给他","timestamp":"2026-09-12T15:09:01.023Z"}
+{"areaId":"agent","roomId":"liu-kanshan","sender":"刘看山","text":"靠近 Raven 按 E 交互，把“求知印章”交出去，他就会开始出题。三道谜题答完，就能拿到“求真印章”。别紧张，慢慢想。","timestamp":"2026-09-12T15:09:02.229Z"}
+{"areaId":"agent","roomId":"liu-kanshan","sender":"LiuKan","text":"不是用指令吗","timestamp":"2026-09-12T15:09:14.140Z"}
+{"areaId":"agent","roomId":"liu-kanshan","sender":"刘看山","text":"不用指令，靠近 Raven 按 E 交互就行，印章会自己递过去。要是没反应，就再靠近一点或看看他头上的交互提示。答完题拿到“求真印章”，回来找我。","timestamp":"2026-09-12T15:09:15.165Z"}
+{"areaId":"agent","roomId":"liu-kanshan","sender":"System","text":"#sys: 玩家「LiuKan」向你赠送了物品 seal-truth（数量 1）","timestamp":"2026-09-12T15:11:22.550Z"}
+{"areaId":"agent","roomId":"liu-kanshan","sender":"刘看山","text":"收到啦，谢谢你，这枚“求真印章”我收下了。给你 5 层以上的通行卡，去穹顶找我看山吧，路上小心。","timestamp":"2026-09-12T15:11:23.703Z"}

@@ -1,0 +1,85 @@
+﻿<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>楼层聊天系统</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main class="container">
+      <section id="joinPanel" class="card">
+        <h1>楼层聊天系统</h1>
+        <label>用户名 <input id="nameInput" /></label>
+
+        <label>
+          用户类型
+          <select id="roleSelect">
+            <option value="visitor">普通用户</option>
+            <option value="resident">常驻用户</option>
+          </select>
+        </label>
+
+        <div id="residentFields" class="hidden">
+          <label>
+            常驻楼层
+            <select id="homeFloorSelect"></select>
+          </label>
+          <label>
+            门牌号 (1-10)
+            <select id="doorplateSelect"></select>
+          </label>
+        </div>
+
+        <label>
+          初始区域
+          <select id="areaSelect"></select>
+        </label>
+
+        <button id="joinBtn">进入</button>
+      </section>
+
+      <section id="chatPanel" class="card hidden">
+        <div class="row">
+          <strong id="selfInfo"></strong>
+        </div>
+
+        <div class="row">
+          <label>
+            切换区域
+            <select id="switchAreaSelect"></select>
+          </label>
+          <button id="switchAreaBtn">切换</button>
+        </div>
+
+        <div id="roomPanel" class="row hidden">
+          <label>
+            楼层内位置
+            <select id="roomSelect"></select>
+          </label>
+          <button id="enterRoomBtn">进入</button>
+        </div>
+
+        <p id="locationInfo"></p>
+
+        <div class="layout">
+          <div>
+            <h3>同房间在线用户</h3>
+            <ul id="usersList"></ul>
+          </div>
+
+          <div>
+            <h3>聊天</h3>
+            <div id="messages" class="messages"></div>
+            <div class="row">
+              <input id="messageInput" placeholder="输入消息" />
+              <button id="sendBtn">发送</button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script src="client.js"></script>
+  </body>
+</html>

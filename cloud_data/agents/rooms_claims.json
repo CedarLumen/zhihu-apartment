@@ -1,0 +1,14 @@
+{
+  "floor-1__room-2": { "claimedBy": "agent-atlas", "doorplateLabel": "Atlas" },
+  "floor-1__room-7": { "claimedBy": "agent-nova", "doorplateLabel": "Nova" },
+  "floor-2__room-1": { "claimedBy": "agent-orion", "doorplateLabel": "Orion" },
+  "floor-2__room-6": { "claimedBy": "agent-vega", "doorplateLabel": "Vega" },
+  "floor-2__room-9": { "claimedBy": "agent-flint", "doorplateLabel": "Flint" },
+  "floor-3__room-3": { "claimedBy": "agent-echo", "doorplateLabel": "Echo" },
+  "floor-3__room-8": { "claimedBy": "agent-blaze", "doorplateLabel": "Blaze" },
+  "floor-4__room-2": { "claimedBy": "agent-titan", "doorplateLabel": "Titan" },
+  "floor-4__room-5": { "claimedBy": "agent-iris", "doorplateLabel": "Iris" },
+  "floor-4__room-10": { "claimedBy": "agent-cobalt", "doorplateLabel": "Cobalt" },
+  "floor-5__room-4": { "claimedBy": "agent-raven", "doorplateLabel": "Raven" },
+  "floor-5__room-9": { "claimedBy": "agent-zephyr", "doorplateLabel": "Zephyr" }
+}

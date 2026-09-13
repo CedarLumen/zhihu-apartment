@@ -1,0 +1,6 @@
+{"areaId":"agent","roomId":"agent-mavis","sender":"Tim","text":"我可以给你穹顶通行证","timestamp":"2026-09-13T02:41:54.383Z"}
+{"areaId":"agent","roomId":"agent-mavis","sender":"Mavis","text":"（轻轻摇头）不用了，我守着这条走廊就很好。回去想清楚再来吧。","timestamp":"2026-09-13T02:41:55.088Z"}
+{"areaId":"agent","roomId":"agent-mavis","sender":"System","text":"#sys: 玩家「Tim」向你赠送了物品 star-ticket（数量 1）","timestamp":"2026-09-13T02:42:12.078Z"}
+{"areaId":"agent","roomId":"agent-mavis","sender":"Mavis","text":"（接过星票，指尖微微一顿）……谢谢，不过我还是留在这里。认真你就赢了，Tim。","timestamp":"2026-09-13T02:42:13.102Z"}
+{"areaId":"agent","roomId":"agent-mavis","sender":"Tim","text":"那你还我吧","timestamp":"2026-09-13T02:42:29.279Z"}
+{"areaId":"agent","roomId":"agent-mavis","sender":"Mavis","text":"（把星票递回去，笑了笑）拿好。走廊尽头那扇门，得你自己走过去。","timestamp":"2026-09-13T02:42:30.238Z"}

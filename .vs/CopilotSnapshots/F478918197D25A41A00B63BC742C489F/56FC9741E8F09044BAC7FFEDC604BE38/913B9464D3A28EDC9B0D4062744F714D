@@ -1,0 +1,186 @@
+﻿const joinPanel = document.getElementById('joinPanel');
+const joinPanel = document.getElementById('joinPanel');
+const chatPanel = document.getElementById('chatPanel');
+
+const nameInput = document.getElementById('nameInput');
+const roleSelect = document.getElementById('roleSelect');
+const residentFields = document.getElementById('residentFields');
+const homeFloorSelect = document.getElementById('homeFloorSelect');
+const doorplateSelect = document.getElementById('doorplateSelect');
+const areaSelect = document.getElementById('areaSelect');
+const joinBtn = document.getElementById('joinBtn');
+
+const selfInfo = document.getElementById('selfInfo');
+const locationInfo = document.getElementById('locationInfo');
+const switchAreaSelect = document.getElementById('switchAreaSelect');
+const switchAreaBtn = document.getElementById('switchAreaBtn');
+const roomPanel = document.getElementById('roomPanel');
+const roomSelect = document.getElementById('roomSelect');
+const enterRoomBtn = document.getElementById('enterRoomBtn');
+
+const usersList = document.getElementById('usersList');
+const messages = document.getElementById('messages');
+const messageInput = document.getElementById('messageInput');
+const sendBtn = document.getElementById('sendBtn');
+
+let ws;
+let layout;
+
+function addMessage(sender, text, isSystem = false) {
+  const item = document.createElement('div');
+  item.className = `msg ${isSystem ? 'sys' : ''}`;
+  item.textContent = `${sender}: ${text}`;
+  messages.appendChild(item);
+  messages.scrollTop = messages.scrollHeight;
+}
+
+function areaName(areaId) {
+  if (areaId === 'lobby-1') return 'Lobby 1';
+  if (areaId === 'lobby-2') return 'Lobby 2';
+  if (areaId.startsWith('floor-')) return `Floor ${areaId.split('-')[1]}`;
+  return areaId;
+}
+
+function roomName(roomId) {
+  if (roomId === 'main') return 'Lobby';
+  if (roomId === 'corridor') return 'Corridor';
+  if (roomId.startsWith('room-')) return `Doorplate ${roomId.split('-')[1]} Room`;
+  return roomId;
+}
+
+function fillOptions() {
+  const areas = [
+    ...layout.lobbies.map(x => ({ value: x.id, label: `${x.name} (cap ${x.capacity})` })),
+    ...layout.floors.map(x => ({
+      value: `floor-${x}`,
+      label: `Floor ${x} (resident ${layout.residentCapacity}/visitor ${layout.visitorCapacity})`
+    }))
+  ];
+
+  [areaSelect, switchAreaSelect].forEach(select => {
+    select.innerHTML = '';
+    areas.forEach(item => {
+      const option = document.createElement('option');
+      option.value = item.value;
+      option.textContent = item.label;
+      select.appendChild(option);
+    });
+  });
+
+  homeFloorSelect.innerHTML = '';
+  layout.floors.forEach(x => {
+    const option = document.createElement('option');
+    option.value = String(x);
+    option.textContent = `Floor ${x}`;
+    homeFloorSelect.appendChild(option);
+  });
+
+  doorplateSelect.innerHTML = '';
+  for (let i = 1; i <= layout.residentCapacity; i += 1) {
+    const option = document.createElement('option');
+    option.value = String(i);
+    option.textContent = String(i);
+    doorplateSelect.appendChild(option);
+  }
+
+  roomSelect.innerHTML = '';
+  const corridorOption = document.createElement('option');
+  corridorOption.value = 'corridor';
+  corridorOption.textContent = 'Corridor';
+  roomSelect.appendChild(corridorOption);
+
+  for (let i = 1; i <= layout.residentCapacity; i += 1) {
+    const option = document.createElement('option');
+    option.value = `room-${i}`;
+    option.textContent = `Doorplate ${i} Room`;
+    roomSelect.appendChild(option);
+  }
+}
+
+function syncState(state) {
+  locationInfo.textContent = `Current area: ${areaName(state.areaId)} / ${roomName(state.roomId)}`;
+  roomPanel.classList.toggle('hidden', !state.canChooseRoom);
+
+  usersList.innerHTML = '';
+  state.roomUsers.forEach(u => {
+    const li = document.createElement('li');
+    if (u.role === 'resident') {
+      li.textContent = `${u.name} (resident floor ${u.homeFloor}, doorplate ${u.doorplate})`;
+    } else {
+      li.textContent = `${u.name} (visitor)`;
+    }
+    usersList.appendChild(li);
+  });
+}
+
+function send(type, payload) {
+  ws.send(JSON.stringify({ type, payload }));
+}
+
+async function init() {
+  const res = await fetch('/api/layout');
+  layout = await res.json();
+  fillOptions();
+
+  const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${protocol}://${window.location.host}`);
+
+  ws.onmessage = e => {
+    const data = JSON.parse(e.data);
+    if (data.type === 'error') {
+      alert(data.payload.message);
+      return;
+    }
+    if (data.type === 'chat') {
+      addMessage(data.payload.sender, data.payload.text, data.payload.sender === 'System');
+      return;
+    }
+    if (data.type === 'joined') {
+      const me = data.payload;
+      selfInfo.textContent = me.role === 'resident'
+        ? `User: ${me.name} (resident floor ${me.homeFloor}, doorplate ${me.doorplate})`
+        : `User: ${me.name} (visitor)`;
+      joinPanel.classList.add('hidden');
+      chatPanel.classList.remove('hidden');
+      return;
+    }
+    if (data.type === 'state') {
+      syncState(data.payload);
+    }
+  };
+
+  roleSelect.addEventListener('change', () => {
+    residentFields.classList.toggle('hidden', roleSelect.value !== 'resident');
+  });
+
+  joinBtn.addEventListener('click', () => {
+    const payload = {
+      name: nameInput.value,
+      role: roleSelect.value,
+      areaId: areaSelect.value
+    };
+    if (roleSelect.value === 'resident') {
+      payload.homeFloor = Number(homeFloorSelect.value);
+      payload.doorplate = Number(doorplateSelect.value);
+    }
+    send('join', payload);
+  });
+
+  switchAreaBtn.addEventListener('click', () => {
+    send('switch-area', { areaId: switchAreaSelect.value });
+  });
+
+  enterRoomBtn.addEventListener('click', () => {
+    send('enter-room', { roomId: roomSelect.value });
+  });
+
+  sendBtn.addEventListener('click', () => {
+    if (!messageInput.value.trim()) {
+      return;
+    }
+    send('chat', { text: messageInput.value });
+    messageInput.value = '';
+  });
+}
+
+init();

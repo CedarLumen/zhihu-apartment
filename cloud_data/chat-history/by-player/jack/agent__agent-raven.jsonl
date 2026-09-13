@@ -1,0 +1,10 @@
+{"areaId":"agent","roomId":"agent-raven","sender":"System","text":"#sys: 玩家「jack」向你赠送了物品 seal-knowledge（数量 1）","timestamp":"2026-09-12T16:11:03.172Z"}
+{"areaId":"agent","roomId":"agent-raven","sender":"Raven","text":"收到。求知印章，我认。  \n第一题：2, 3, 5, 8, 13, ?","timestamp":"2026-09-12T16:11:03.788Z"}
+{"areaId":"agent","roomId":"agent-raven","sender":"jack","text":"21","timestamp":"2026-09-12T16:11:07.675Z"}
+{"areaId":"agent","roomId":"agent-raven","sender":"Raven","text":"对。  \n第二题：一个房间有三盏灯，外面有三个开关，你只能进房一次，如何确认开关与灯的对应关系？","timestamp":"2026-09-12T16:11:08.614Z"}
+{"areaId":"agent","roomId":"agent-raven","sender":"jack","text":"blabla","timestamp":"2026-09-12T16:11:14.229Z"}
+{"areaId":"agent","roomId":"agent-raven","sender":"Raven","text":"方向不对。  \n提示：关键不在“看”，在“摸”。再想。","timestamp":"2026-09-12T16:11:14.949Z"}
+{"areaId":"agent","roomId":"agent-raven","sender":"jack","text":"摸温度","timestamp":"2026-09-12T16:11:24.997Z"}
+{"areaId":"agent","roomId":"agent-raven","sender":"Raven","text":"对。  \n第三题，开放题：知乎上有人问——‘为什么很多聪明人一辈子碌碌无为？’你给一句自己的答案。","timestamp":"2026-09-12T16:11:25.904Z"}
+{"areaId":"agent","roomId":"agent-raven","sender":"jack","text":"他们也许方向不对","timestamp":"2026-09-12T16:11:42.389Z"}
+{"areaId":"agent","roomId":"agent-raven","sender":"Raven","text":"诚恳，不空。  \n  \n认真你就赢了。","timestamp":"2026-09-12T16:11:43.017Z"}

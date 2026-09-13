@@ -1,0 +1,894 @@
+﻿'use strict';
+
+const path = require('path');
+const http = require('http');
+const fs = require('fs');
+const fsp = require('fs/promises');
+const express = require('express');
+const { WebSocketServer } = require('ws');
+
+const PORT = process.env.PORT || 3000;
+const FLOOR_COUNT = 5;
+const RESIDENT_CAPACITY = 10;
+const VISITOR_CAPACITY = 20;
+const LOBBY_CAPACITY = 200;
+const CHAT_HISTORY_LIMIT = 100;
+const HISTORY_RETENTION_DAYS = 30;
+const CLIENT_DOOR_START_X = 80;
+const CLIENT_DOOR_SPACING = 84;
+const CLIENT_STAIRS_OFFSET_X = 120;
+const CLIENT_COMMUNITY_SPACE_OFFSET_X = CLIENT_STAIRS_OFFSET_X + CLIENT_DOOR_SPACING;
+const CLIENT_FLOOR_Y = 208;
+const CLOUD_DIR = path.join(__dirname, 'cloud_data');
+const CHAT_HISTORY_DIR = path.join(CLOUD_DIR, 'chat-history');
+const PLAYER_CHAT_HISTORY_DIR = path.join(CHAT_HISTORY_DIR, 'by-player');
+const PLAYER_PROFILE_FILE = path.join(CLOUD_DIR, 'player-profiles.json');
+const LEGACY_CHAT_HISTORY_FILE = path.join(CLOUD_DIR, 'chat-history.jsonl');
+const HISTORY_RETENTION_MS = HISTORY_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+const TEXT = {
+  lobby: 'Lobby',
+  system: 'System',
+  lobbyFull: 'Lobby is full (max',
+  floorResidentFull: 'Resident capacity reached on this floor (max',
+  floorVisitorFull: 'Visitor capacity reached on this floor (max',
+  personUnit: 'users)',
+  doorplateUsed: 'Doorplate is already in use',
+  leave: 'left',
+  enter: 'entered',
+  inputName: 'Please enter a user name',
+  invalidArea: 'Invalid target area',
+  residentFloorRange: 'Resident must choose a floor in range',
+  doorplateRange: 'Doorplate must be in range',
+  joinFirst: 'Please join first',
+  lobbyNoRoom: 'Cannot enter room while in lobby',
+  invalidRoom: 'Invalid room',
+  connected: 'Connected. Please join an area first.',
+  badMessage: 'Invalid message format',
+  unknownCommand: 'Unknown command',
+  floorOnlyAction: 'This action is only available on floor corridor',
+  emptyRoomRequired: 'Please choose an empty room',
+  claimSuccess: 'Room claimed successfully',
+  moveSuccess: 'Moved to new room successfully',
+  historyCleared: 'Your chat history has been cleared',
+  roomAccessDenied: 'You are not allowed to enter this room',
+  roomSettingsUpdated: 'Room permission settings updated'
+};
+
+const app = express();
+const server = http.createServer(app);
+const wss = new WebSocketServer({ server });
+
+app.use((req, res, next) => {
+  const accept = req.headers.accept || '';
+  if (accept.includes('application/json')) {
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  } else if (accept.includes('text/')) {
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+  }
+  next();
+});
+
+const clients = new Map();
+let nextUserId = 1;
+const playerRoomHistory = new Map();
+const playerProfiles = new Map();
+
+function normalizedPlayerName(name) {
+  return String(name || '').trim();
+}
+
+function normalizedPlayerNameKey(name) {
+  return normalizedPlayerName(name).toLocaleLowerCase();
+}
+
+function loadPlayerProfiles() {
+  try {
+    if (!fs.existsSync(PLAYER_PROFILE_FILE)) {
+      return;
+    }
+    const raw = fs.readFileSync(PLAYER_PROFILE_FILE, 'utf8');
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      return;
+    }
+    for (const item of parsed) {
+      const name = normalizedPlayerName(item?.name);
+      const key = normalizedPlayerNameKey(name);
+      if (!key) {
+        continue;
+      }
+      const role = item?.role === 'resident' ? 'resident' : 'visitor';
+      const homeFloor = Number(item?.homeFloor);
+      const doorplate = Number(item?.doorplate);
+      const safeHomeFloor = Number.isInteger(homeFloor) && homeFloor >= 1 && homeFloor <= FLOOR_COUNT ? homeFloor : null;
+      const safeDoorplate = Number.isInteger(doorplate) && doorplate >= 1 && doorplate <= RESIDENT_CAPACITY ? doorplate : null;
+      playerProfiles.set(key, {
+        name,
+        role,
+        homeFloor: role === 'resident' ? safeHomeFloor : null,
+        doorplate: role === 'resident' ? safeDoorplate : null,
+        roomSettings: normalizeRoomSettings(item?.roomSettings, name)
+      });
+    }
+  } catch (_err) {
+    // Ignore profile load failures.
+  }
+}
+
+async function persistPlayerProfiles() {
+  try {
+    await fsp.mkdir(CLOUD_DIR, { recursive: true });
+    const payload = [...playerProfiles.values()].map(profile => ({
+      name: profile.name,
+      role: profile.role,
+      homeFloor: profile.homeFloor,
+      doorplate: profile.doorplate,
+      roomSettings: normalizeRoomSettings(profile.roomSettings, profile.name)
+    }));
+    await fsp.writeFile(PLAYER_PROFILE_FILE, JSON.stringify(payload, null, 2), 'utf8');
+  } catch (_err) {
+    // Ignore profile save failures.
+  }
+}
+
+function upsertPlayerProfileFromUser(user) {
+  const key = normalizedPlayerNameKey(user?.name);
+  if (!key) {
+    return;
+  }
+  playerProfiles.set(key, {
+    name: normalizedPlayerName(user.name),
+    role: user.role === 'resident' ? 'resident' : 'visitor',
+    homeFloor: user.role === 'resident' ? user.homeFloor : null,
+    doorplate: user.role === 'resident' ? user.doorplate : null,
+    roomSettings: normalizeRoomSettings(user.roomSettings, user.name)
+  });
+  void persistPlayerProfiles();
+}
+
+function getPlayerProfileByName(name) {
+  const key = normalizedPlayerNameKey(name);
+  if (!key) {
+    return null;
+  }
+  return playerProfiles.get(key) || null;
+}
+
+function defaultRoomSettings() {
+  return {
+    defaultAccess: 'allow',
+    whitelist: [],
+    blacklist: []
+  };
+}
+
+function normalizePlayerNameList(list, selfName) {
+  if (!Array.isArray(list)) {
+    return [];
+  }
+  const selfKey = normalizedPlayerNameKey(selfName);
+  const seen = new Set();
+  const normalized = [];
+  for (const item of list) {
+    const name = normalizedPlayerName(item);
+    if (!name) {
+      continue;
+    }
+    const key = normalizedPlayerNameKey(name);
+    if (!key || key === selfKey || seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    normalized.push(name);
+  }
+  return normalized;
+}
+
+function normalizeRoomSettings(payload, ownerName) {
+  const base = defaultRoomSettings();
+  base.defaultAccess = payload?.defaultAccess === 'deny' ? 'deny' : 'allow';
+  base.whitelist = normalizePlayerNameList(payload?.whitelist, ownerName);
+  const whitelistKeys = new Set(base.whitelist.map(name => normalizedPlayerNameKey(name)));
+  base.blacklist = normalizePlayerNameList(payload?.blacklist, ownerName)
+    .filter(name => !whitelistKeys.has(normalizedPlayerNameKey(name)));
+  return base;
+}
+
+function canEnterOwnedRoom(visitor, owner) {
+  if (!visitor || !owner) {
+    return true;
+  }
+  if (owner.id && visitor.id === owner.id) {
+    return true;
+  }
+  if (normalizedPlayerNameKey(visitor.name) === normalizedPlayerNameKey(owner.name)) {
+    return true;
+  }
+  const settings = normalizeRoomSettings(owner.roomSettings, owner.name);
+  const visitorKey = normalizedPlayerNameKey(visitor.name);
+  const isListed = list => list.some(name => normalizedPlayerNameKey(name) === visitorKey);
+  if (isListed(settings.blacklist)) {
+    return false;
+  }
+  if (isListed(settings.whitelist)) {
+    return true;
+  }
+  return settings.defaultAccess !== 'deny';
+}
+
+function areaUsers(areaId, excludeUserId = null) {
+  return [...clients.values()]
+    .filter(u => u.areaId === areaId && u.id !== excludeUserId)
+    .map(u => ({ id: u.id, name: u.name }));
+}
+
+function historyFilePath(playerName, areaId, roomId) {
+  const playerDir = path.join(PLAYER_CHAT_HISTORY_DIR, encodeURIComponent(normalizedPlayerNameKey(playerName)));
+  const fileName = `${encodeURIComponent(areaId)}__${encodeURIComponent(roomId)}.jsonl`;
+  return path.join(playerDir, fileName);
+}
+
+function isWithinRetention(timestamp) {
+  const time = Date.parse(timestamp);
+  if (Number.isNaN(time)) {
+    return false;
+  }
+  return Date.now() - time <= HISTORY_RETENTION_MS;
+}
+
+function filterRecentMessages(messages) {
+  return (messages || []).filter(message => isWithinRetention(message.timestamp));
+}
+
+function historyMapKey(playerName, areaId, roomId) {
+  return `${normalizedPlayerNameKey(playerName)}|${areaId}|${roomId}`;
+}
+
+function loadPlayerRoomHistory(playerName, areaId, roomId) {
+  const fullPath = historyFilePath(playerName, areaId, roomId);
+  try {
+    if (!fs.existsSync(fullPath)) {
+      return [];
+    }
+    const raw = fs.readFileSync(fullPath, 'utf8');
+    const lines = raw.split(/\r?\n/).filter(Boolean);
+    const records = [];
+    for (const line of lines) {
+      try {
+        const record = JSON.parse(line);
+        if (!record?.areaId || !record?.roomId || !isWithinRetention(record.timestamp)) {
+          continue;
+        }
+        records.push(record);
+      } catch (_err) {
+        // Ignore malformed line.
+      }
+    }
+    return filterRecentMessages(records).slice(-CHAT_HISTORY_LIMIT);
+  } catch (_err) {
+    return [];
+  }
+}
+
+function getPlayerRoomHistory(playerName, areaId, roomId) {
+  const key = historyMapKey(playerName, areaId, roomId);
+  if (!playerRoomHistory.has(key)) {
+    playerRoomHistory.set(key, loadPlayerRoomHistory(playerName, areaId, roomId));
+  }
+  return playerRoomHistory.get(key) || [];
+}
+
+async function saveHistoryToCloud(playerName, record) {
+  try {
+    await fsp.mkdir(path.dirname(historyFilePath(playerName, record.areaId, record.roomId)), { recursive: true });
+    await fsp.appendFile(historyFilePath(playerName, record.areaId, record.roomId), `${JSON.stringify(record)}\n`, 'utf8');
+  } catch (_err) {
+    // Ignore cloud history save failures.
+  }
+}
+
+function appendHistoryForUser(user, record) {
+  const key = historyMapKey(user.name, record.areaId, record.roomId);
+  const list = getPlayerRoomHistory(user.name, record.areaId, record.roomId);
+  list.push(record);
+  playerRoomHistory.set(key, filterRecentMessages(list).slice(-CHAT_HISTORY_LIMIT));
+  void saveHistoryToCloud(user.name, record);
+}
+
+function sendHistory(user) {
+  if (!user?.ws || user.ws.readyState !== 1 || !user.areaId || !user.roomId) {
+    return;
+  }
+  if (!user.restoreHistory) {
+    send(user.ws, 'chat-history', { messages: [] });
+    return;
+  }
+  void fsp.mkdir(path.dirname(historyFilePath(user.name, user.areaId, user.roomId)), { recursive: true });
+  const recentMessages = getPlayerRoomHistory(user.name, user.areaId, user.roomId);
+  send(user.ws, 'chat-history', { messages: recentMessages });
+}
+
+async function clearUserHistory(playerName) {
+  const prefix = `${normalizedPlayerNameKey(playerName)}|`;
+  for (const key of playerRoomHistory.keys()) {
+    if (key.startsWith(prefix)) {
+      playerRoomHistory.delete(key);
+    }
+  }
+  try {
+    await fsp.rm(path.join(PLAYER_CHAT_HISTORY_DIR, encodeURIComponent(normalizedPlayerNameKey(playerName))), {
+      recursive: true,
+      force: true
+    });
+  } catch (_err) {
+    // Ignore user history clear failures.
+  }
+}
+
+loadPlayerProfiles();
+
+app.use('/textures', express.static(path.join(__dirname, 'textures')));
+app.use('/sound', express.static(path.join(__dirname, 'sound')));
+
+app.use(express.static(path.join(__dirname, 'public'), {
+  setHeaders: (res, filePath) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    if (filePath.endsWith('.html')) {
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    } else if (filePath.endsWith('.js')) {
+      res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+    } else if (filePath.endsWith('.css')) {
+      res.setHeader('Content-Type', 'text/css; charset=utf-8');
+    }
+  }
+}));
+
+app.get('/api/layout', (_req, res) => {
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  const floors = Array.from({ length: FLOOR_COUNT }, (_v, i) => i + 1);
+  const lobbies = [
+    { id: 'lobby-1', name: `${TEXT.lobby} 1`, capacity: LOBBY_CAPACITY },
+    { id: 'lobby-2', name: `${TEXT.lobby} 2`, capacity: LOBBY_CAPACITY }
+  ];
+  res.json({
+    floors,
+    lobbies,
+    residentCapacity: RESIDENT_CAPACITY,
+    visitorCapacity: VISITOR_CAPACITY,
+    lobbyCapacity: LOBBY_CAPACITY
+  });
+});
+
+function parseArea(areaId) {
+  if (areaId === 'lobby-1' || areaId === 'lobby-2') {
+    return { type: 'lobby', id: areaId };
+  }
+  const match = /^floor-(\d+)$/.exec(areaId);
+  if (!match) {
+    return null;
+  }
+  const floor = Number(match[1]);
+  if (floor < 1 || floor > FLOOR_COUNT) {
+    return null;
+  }
+  return { type: 'floor', id: areaId, floor };
+}
+
+function send(ws, type, payload) {
+  ws.send(JSON.stringify({ type, payload }));
+}
+
+function effectiveRoleOnArea(user, area) {
+  if (area.type !== 'floor') {
+    return 'visitor';
+  }
+  if (user.role === 'resident' && user.homeFloor === area.floor) {
+    return 'resident';
+  }
+  return 'visitor';
+}
+
+function isDoorplateUsedOnHomeFloor(user, targetArea) {
+  return !!roomOwner(targetArea.floor, user.doorplate, user.id, user.name);
+}
+
+function roomOwner(floor, doorplate, excludeUserId = null, excludeName = null) {
+  const excludedNameKey = normalizedPlayerNameKey(excludeName);
+  for (const user of clients.values()) {
+    if (excludeUserId !== null && user.id === excludeUserId) {
+      continue;
+    }
+    if (excludedNameKey && normalizedPlayerNameKey(user.name) === excludedNameKey) {
+      continue;
+    }
+    if (user.role === 'resident' && user.homeFloor === floor && user.doorplate === doorplate) {
+      return user;
+    }
+  }
+
+  for (const [key, profile] of playerProfiles.entries()) {
+    if (excludedNameKey && key === excludedNameKey) {
+      continue;
+    }
+    if (profile.role === 'resident' && profile.homeFloor === floor && profile.doorplate === doorplate) {
+      return {
+        id: null,
+        name: profile.name,
+        role: profile.role,
+        homeFloor: profile.homeFloor,
+        doorplate: profile.doorplate,
+        roomSettings: normalizeRoomSettings(profile.roomSettings, profile.name)
+      };
+    }
+  }
+  return null;
+}
+
+function floorCounts(floor, excludeUserId = null) {
+  const residentOwners = new Set();
+  let visitorCount = 0;
+
+  for (const profile of playerProfiles.values()) {
+    if (profile.role === 'resident' && profile.homeFloor === floor && profile.doorplate) {
+      residentOwners.add(normalizedPlayerNameKey(profile.name));
+    }
+  }
+
+  for (const other of clients.values()) {
+    if (excludeUserId !== null && other.id === excludeUserId) {
+      continue;
+    }
+
+    const area = parseArea(other.areaId);
+    if (!area || area.type !== 'floor' || area.floor !== floor) {
+      continue;
+    }
+
+    const isResidentOfThisFloor = other.role === 'resident' && other.homeFloor === floor;
+    if (!isResidentOfThisFloor) {
+      visitorCount += 1;
+    }
+  }
+
+  return { residentCount: residentOwners.size, visitorCount };
+}
+
+function canEnterArea(user, targetArea) {
+  if (targetArea.type === 'lobby') {
+    const currentCount = [...clients.values()].filter(u => u.areaId === targetArea.id && u.id !== user.id).length;
+    if (currentCount >= LOBBY_CAPACITY) {
+      return { ok: false, reason: `${TEXT.lobbyFull} ${LOBBY_CAPACITY} ${TEXT.personUnit}` };
+    }
+    return { ok: true };
+  }
+
+  const { residentCount, visitorCount } = floorCounts(targetArea.floor, user.id);
+
+  const selfRole = effectiveRoleOnArea(user, targetArea);
+  if (selfRole === 'resident') {
+    if (residentCount >= RESIDENT_CAPACITY) {
+      return { ok: false, reason: `${TEXT.floorResidentFull} ${RESIDENT_CAPACITY} ${TEXT.personUnit}` };
+    }
+    if (isDoorplateUsedOnHomeFloor(user, targetArea)) {
+      return { ok: false, reason: TEXT.doorplateUsed };
+    }
+  } else if (visitorCount >= VISITOR_CAPACITY) {
+    return { ok: false, reason: `${TEXT.floorVisitorFull} ${VISITOR_CAPACITY} ${TEXT.personUnit}` };
+  }
+
+  return { ok: true };
+}
+
+function currentRoomUsers(areaId, roomId) {
+  return [...clients.values()]
+    .filter(u => u.areaId === areaId && u.roomId === roomId)
+    .map(u => ({
+      id: u.id,
+      name: u.name,
+      role: u.role,
+      homeFloor: u.homeFloor,
+      doorplate: u.doorplate,
+      posX: Number.isFinite(u.posX) ? u.posX : null,
+      posY: Number.isFinite(u.posY) ? u.posY : null
+    }));
+}
+
+function broadcastRoomUsers(areaId, roomId) {
+  const roomUsers = currentRoomUsers(areaId, roomId);
+  for (const user of clients.values()) {
+    if (user.areaId === areaId && user.roomId === roomId && user.ws.readyState === 1) {
+      send(user.ws, 'room-users', { roomUsers });
+    }
+  }
+}
+
+function floorDirectory(floor) {
+  const directory = [];
+  for (let doorplate = 1; doorplate <= RESIDENT_CAPACITY; doorplate += 1) {
+    const owner = roomOwner(floor, doorplate);
+    directory.push({
+      doorplate,
+      ownerName: owner ? owner.name : null
+    });
+  }
+  return directory;
+}
+
+function pushStateForUser(user) {
+  if (!user.ws || user.ws.readyState !== 1) {
+    return;
+  }
+  const area = parseArea(user.areaId);
+  const roomUsers = currentRoomUsers(user.areaId, user.roomId);
+  send(user.ws, 'state', {
+    areaId: user.areaId,
+    roomId: user.roomId,
+    areaType: area?.type,
+    roomUsers,
+    canChooseRoom: area?.type === 'floor',
+    floor: area?.floor ?? null,
+    floorDirectory: area?.type === 'floor' ? floorDirectory(area.floor) : [],
+    areaUsers: areaUsers(user.areaId, user.id),
+    myRoomSettings: normalizeRoomSettings(user.roomSettings, user.name),
+    ownedRoom: user.role === 'resident' && user.homeFloor && user.doorplate
+      ? { floor: user.homeFloor, roomId: `room-${user.doorplate}` }
+      : null
+  });
+}
+
+function pushStateForLocation(areaId, _roomId) {
+  for (const user of clients.values()) {
+    if (user.areaId === areaId) {
+      pushStateForUser(user);
+    }
+  }
+}
+
+function notifyRoom(areaId, roomId, text, sender = TEXT.system) {
+  const message = {
+    areaId,
+    roomId,
+    sender,
+    text,
+    timestamp: new Date().toISOString()
+  };
+
+  for (const user of clients.values()) {
+    if (user.areaId === areaId && user.roomId === roomId && user.ws.readyState === 1) {
+      appendHistoryForUser(user, message);
+      send(user.ws, 'chat', message);
+    }
+  }
+}
+
+function moveUser(user, newAreaId, newRoomId) {
+  const oldAreaId = user.areaId;
+  const oldRoomId = user.roomId;
+  user.areaId = newAreaId;
+  user.roomId = newRoomId;
+  user.posX = null;
+  user.posY = null;
+
+  if (oldAreaId && oldRoomId) {
+    notifyRoom(oldAreaId, oldRoomId, `${user.name} ${TEXT.leave}`);
+    pushStateForLocation(oldAreaId, oldRoomId);
+  }
+
+  notifyRoom(newAreaId, newRoomId, `${user.name} ${TEXT.enter}`);
+  pushStateForLocation(newAreaId, newRoomId);
+  broadcastRoomUsers(newAreaId, newRoomId);
+  pushStateForUser(user);
+  sendHistory(user);
+}
+
+function handleJoin(ws, payload) {
+  const name = String(payload?.name || '').trim();
+  const requestedRole = payload?.role === 'resident' ? 'resident' : 'visitor';
+  const areaId = String(payload?.areaId || '').trim();
+  const area = parseArea(areaId);
+  const existingProfile = getPlayerProfileByName(name);
+
+  if (!name) {
+    send(ws, 'error', { message: TEXT.inputName });
+    return;
+  }
+  if (!area) {
+    send(ws, 'error', { message: TEXT.invalidArea });
+    return;
+  }
+
+  const user = {
+    id: nextUserId++,
+    ws,
+    name,
+    role: existingProfile?.role === 'resident' ? 'resident' : requestedRole,
+    restoreHistory: payload?.restoreHistory !== false,
+    homeFloor: existingProfile?.role === 'resident' ? existingProfile.homeFloor : null,
+    doorplate: existingProfile?.role === 'resident' ? existingProfile.doorplate : null,
+    roomSettings: normalizeRoomSettings(existingProfile?.roomSettings, name),
+    areaId: null,
+    roomId: null,
+    posX: null,
+    posY: null
+  };
+
+  if (user.role === 'resident' && (!user.homeFloor || !user.doorplate)) {
+    const homeFloor = Number(payload?.homeFloor);
+    const doorplate = Number(payload?.doorplate);
+    if (!Number.isInteger(homeFloor) || homeFloor < 1 || homeFloor > FLOOR_COUNT) {
+      send(ws, 'error', { message: `${TEXT.residentFloorRange} 1-${FLOOR_COUNT}` });
+      return;
+    }
+    if (!Number.isInteger(doorplate) || doorplate < 1 || doorplate > RESIDENT_CAPACITY) {
+      send(ws, 'error', { message: `${TEXT.doorplateRange} 1-${RESIDENT_CAPACITY}` });
+      return;
+    }
+    user.homeFloor = homeFloor;
+    user.doorplate = doorplate;
+  }
+
+  if (user.role === 'resident') {
+    if (!Number.isInteger(user.homeFloor) || !Number.isInteger(user.doorplate)) {
+      send(ws, 'error', { message: TEXT.invalidRoom });
+      return;
+    }
+    if (roomOwner(user.homeFloor, user.doorplate, user.id, user.name)) {
+      send(ws, 'error', { message: TEXT.doorplateUsed });
+      return;
+    }
+    if (!existingProfile) {
+      const { residentCount } = floorCounts(user.homeFloor);
+      if (residentCount >= RESIDENT_CAPACITY) {
+        send(ws, 'error', { message: `${TEXT.floorResidentFull} ${RESIDENT_CAPACITY} ${TEXT.personUnit}` });
+        return;
+      }
+    }
+  }
+
+  const access = canEnterArea(user, area);
+  if (!access.ok) {
+    send(ws, 'error', { message: access.reason });
+    return;
+  }
+
+  clients.set(ws, user);
+  upsertPlayerProfileFromUser(user);
+  const defaultRoom = area.type === 'floor' ? 'corridor' : 'main';
+  moveUser(user, area.id, defaultRoom);
+
+  send(ws, 'joined', {
+    id: user.id,
+    name: user.name,
+    role: user.role,
+    homeFloor: user.homeFloor,
+    doorplate: user.doorplate
+  });
+}
+
+function handleSwitchArea(ws, payload) {
+  const user = clients.get(ws);
+  if (!user) {
+    send(ws, 'error', { message: TEXT.joinFirst });
+    return;
+  }
+  const area = parseArea(String(payload?.areaId || ''));
+  if (!area) {
+    send(ws, 'error', { message: TEXT.invalidArea });
+    return;
+  }
+
+  const access = canEnterArea(user, area);
+  if (!access.ok) {
+    send(ws, 'error', { message: access.reason });
+    return;
+  }
+
+  const defaultRoom = area.type === 'floor' ? 'corridor' : 'main';
+  moveUser(user, area.id, defaultRoom);
+}
+
+function handleEnterRoom(ws, payload) {
+  const user = clients.get(ws);
+  if (!user) {
+    send(ws, 'error', { message: TEXT.joinFirst });
+    return;
+  }
+  const area = parseArea(user.areaId);
+  if (!area || area.type !== 'floor') {
+    send(ws, 'error', { message: TEXT.lobbyNoRoom });
+    return;
+  }
+
+  const roomId = String(payload?.roomId || '');
+  if (roomId === 'corridor') {
+    moveUser(user, user.areaId, 'corridor');
+    return;
+  }
+
+  if (roomId === 'community-space') {
+    moveUser(user, user.areaId, roomId);
+    return;
+  }
+
+  const match = /^room-(\d+)$/.exec(roomId);
+  if (!match) {
+    send(ws, 'error', { message: TEXT.invalidRoom });
+    return;
+  }
+
+  const doorplate = Number(match[1]);
+  if (doorplate < 1 || doorplate > RESIDENT_CAPACITY) {
+    send(ws, 'error', { message: TEXT.invalidRoom });
+    return;
+  }
+
+  const owner = roomOwner(area.floor, doorplate);
+  if (owner && !canEnterOwnedRoom(user, owner)) {
+    send(ws, 'error', { message: TEXT.roomAccessDenied });
+    return;
+  }
+
+  moveUser(user, user.areaId, `room-${doorplate}`);
+}
+
+function handleClaimRoom(ws, payload) {
+  const user = clients.get(ws);
+  if (!user) {
+    send(ws, 'error', { message: TEXT.joinFirst });
+    return;
+  }
+
+  const area = parseArea(user.areaId);
+  if (!area || area.type !== 'floor' || user.roomId !== 'corridor') {
+    send(ws, 'error', { message: TEXT.floorOnlyAction });
+    return;
+  }
+
+  const doorplate = Number(payload?.doorplate);
+  if (!Number.isInteger(doorplate) || doorplate < 1 || doorplate > RESIDENT_CAPACITY) {
+    send(ws, 'error', { message: TEXT.invalidRoom });
+    return;
+  }
+
+  if (roomOwner(area.floor, doorplate, user.id, user.name)) {
+    send(ws, 'error', { message: TEXT.emptyRoomRequired });
+    return;
+  }
+
+  const alreadyOwnedSame = user.role === 'resident' && user.homeFloor === area.floor && user.doorplate === doorplate;
+  if (alreadyOwnedSame) {
+    moveUser(user, user.areaId, `room-${doorplate}`);
+    send(ws, 'info', { message: TEXT.claimSuccess });
+    return;
+  }
+
+  const { residentCount } = floorCounts(area.floor, user.id);
+  if (residentCount >= RESIDENT_CAPACITY) {
+    send(ws, 'error', { message: `${TEXT.floorResidentFull} ${RESIDENT_CAPACITY} ${TEXT.personUnit}` });
+    return;
+  }
+
+  const hadRoomBefore = user.role === 'resident';
+  user.role = 'resident';
+  user.homeFloor = area.floor;
+  user.doorplate = doorplate;
+  user.roomSettings = normalizeRoomSettings(user.roomSettings, user.name);
+  upsertPlayerProfileFromUser(user);
+
+  moveUser(user, user.areaId, `room-${doorplate}`);
+  send(ws, 'info', { message: hadRoomBefore ? TEXT.moveSuccess : TEXT.claimSuccess });
+}
+
+function handleUpdateRoomSettings(ws, payload) {
+  const user = clients.get(ws);
+  if (!user) {
+    send(ws, 'error', { message: TEXT.joinFirst });
+    return;
+  }
+
+  if (user.role !== 'resident' || !user.homeFloor || !user.doorplate) {
+    send(ws, 'error', { message: TEXT.floorOnlyAction });
+    return;
+  }
+
+  user.roomSettings = normalizeRoomSettings(payload, user.name);
+  upsertPlayerProfileFromUser(user);
+  pushStateForUser(user);
+  send(ws, 'info', { message: TEXT.roomSettingsUpdated });
+}
+
+function handleChat(ws, payload) {
+  const user = clients.get(ws);
+  if (!user) {
+    send(ws, 'error', { message: TEXT.joinFirst });
+    return;
+  }
+  const text = String(payload?.text || '').trim();
+  if (!text) {
+    return;
+  }
+  notifyRoom(user.areaId, user.roomId, text, user.name);
+}
+
+function handlePlayerMove(ws, payload) {
+  const user = clients.get(ws);
+  if (!user || !user.areaId || !user.roomId) {
+    return;
+  }
+
+  const x = Number(payload?.x);
+  const y = Number(payload?.y);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) {
+    return;
+  }
+
+  user.posX = x;
+  user.posY = y;
+  broadcastRoomUsers(user.areaId, user.roomId);
+}
+
+async function handleClearHistory(ws) {
+  const user = clients.get(ws);
+  if (!user) {
+    send(ws, 'error', { message: TEXT.joinFirst });
+    return;
+  }
+
+  await clearUserHistory(user.name);
+  send(ws, 'chat-history', { messages: [] });
+  send(ws, 'info', { message: TEXT.historyCleared });
+}
+
+wss.on('connection', ws => {
+  send(ws, 'welcome', { message: TEXT.connected });
+
+  ws.on('message', raw => {
+    let data;
+    try {
+      data = JSON.parse(raw.toString());
+    } catch (_err) {
+      send(ws, 'error', { message: TEXT.badMessage });
+      return;
+    }
+
+    const type = String(data?.type || '').trim().toLowerCase();
+    const payload = data?.payload || {};
+    if (type === 'join') {
+      handleJoin(ws, payload);
+    } else if (type === 'switch-area') {
+      handleSwitchArea(ws, payload);
+    } else if (type === 'enter-room') {
+      handleEnterRoom(ws, payload);
+    } else if (type === 'chat') {
+      handleChat(ws, payload);
+    } else if (type === 'claim-room' || type === 'claimroom' || type === 'claim_room' || type === 'apply-room') {
+      handleClaimRoom(ws, payload);
+    } else if (type === 'clear-history' || type === 'clearhistory' || type === 'clear_history') {
+      void handleClearHistory(ws);
+    } else if (type === 'player-move' || type === 'playermove' || type === 'player_move') {
+      handlePlayerMove(ws, payload);
+    } else if (type === 'my-room-settings' || type === 'my_room_settings' || type === 'update-room-settings') {
+      handleUpdateRoomSettings(ws, payload);
+    } else {
+      send(ws, 'error', { message: TEXT.unknownCommand });
+    }
+  });
+
+  ws.on('close', () => {
+    const user = clients.get(ws);
+    if (!user) {
+      return;
+    }
+    upsertPlayerProfileFromUser(user);
+    clients.delete(ws);
+    notifyRoom(user.areaId, user.roomId, `${user.name} ${TEXT.leave}`);
+    broadcastRoomUsers(user.areaId, user.roomId);
+    pushStateForLocation(user.areaId, user.roomId);
+  });
+});
+
+server.listen(PORT, () => {
+  console.log(`Server started at http://localhost:${PORT}`);
+});

@@ -1,0 +1,951 @@
+[
+  {
+    "name": "Tim",
+    "role": "resident",
+    "homeFloor": 1,
+    "doorplate": 6,
+    "wallpaper": "violet",
+    "roomSettings": {
+      "defaultAccess": "deny",
+      "whitelist": [
+        "Lyra",
+        "Nova",
+        "Atlas"
+      ],
+      "blacklist": []
+    },
+    "friends": [],
+    "blockedFriends": [],
+    "visitedFloors": [
+      1,
+      2,
+      4,
+      5,
+      10,
+      29,
+      35,
+      42,
+      53,
+      55,
+      56,
+      57,
+      58,
+      59,
+      60,
+      61,
+      62,
+      63,
+      64,
+      65,
+      66,
+      67,
+      68,
+      69,
+      70,
+      71,
+      72,
+      73,
+      74,
+      75,
+      76,
+      78,
+      93,
+      95,
+      96,
+      99,
+      100
+    ],
+    "systemMessages": [
+      {
+        "id": 1,
+        "type": "notice",
+        "text": "You used 示例物品1.",
+        "createdAt": "2026-09-12T08:34:10.832Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 2,
+        "type": "notice",
+        "text": "seal-knowledge已给出",
+        "createdAt": "2026-09-12T08:37:36.869Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 3,
+        "type": "notice",
+        "text": "seal-truth已给出",
+        "createdAt": "2026-09-12T08:40:20.597Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 4,
+        "type": "notice",
+        "text": "You used 穹顶通行证.",
+        "createdAt": "2026-09-12T08:40:25.757Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 5,
+        "type": "notice",
+        "text": "You used 穹顶通行证.",
+        "createdAt": "2026-09-12T09:20:23.956Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 6,
+        "type": "notice",
+        "text": "You used 穹顶通行证.",
+        "createdAt": "2026-09-12T09:20:26.107Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 16,
+        "type": "notice",
+        "text": "You used 穹顶通行证.",
+        "createdAt": "2026-09-12T10:50:46.260Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 17,
+        "type": "notice",
+        "text": "star-ticket已给出",
+        "createdAt": "2026-09-12T10:51:23.598Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 25,
+        "type": "notice",
+        "text": "seal-knowledge已给出",
+        "createdAt": "2026-09-12T14:34:08.280Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 26,
+        "type": "notice",
+        "text": "seal-truth已给出",
+        "createdAt": "2026-09-12T14:35:54.264Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 27,
+        "type": "notice",
+        "text": "You used 穹顶通行证.",
+        "createdAt": "2026-09-12T14:38:55.094Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 28,
+        "type": "notice",
+        "text": "You used 穹顶通行证.",
+        "createdAt": "2026-09-12T14:38:56.234Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 29,
+        "type": "notice",
+        "text": "You used 穹顶通行证.",
+        "createdAt": "2026-09-12T14:38:57.776Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 30,
+        "type": "notice",
+        "text": "You used 穹顶通行证.",
+        "createdAt": "2026-09-12T14:39:10.053Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 31,
+        "type": "notice",
+        "text": "You used 穹顶通行证.",
+        "createdAt": "2026-09-12T14:41:48.876Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 32,
+        "type": "notice",
+        "text": "You used 穹顶通行证.",
+        "createdAt": "2026-09-12T14:41:51.947Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 33,
+        "type": "notice",
+        "text": "You used 穹顶通行证.",
+        "createdAt": "2026-09-12T14:41:52.357Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 34,
+        "type": "notice",
+        "text": "You used 穹顶通行证.",
+        "createdAt": "2026-09-12T14:41:52.973Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 35,
+        "type": "notice",
+        "text": "You used 穹顶通行证.",
+        "createdAt": "2026-09-12T14:41:53.381Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 36,
+        "type": "notice",
+        "text": "You used 穹顶通行证.",
+        "createdAt": "2026-09-12T14:41:53.995Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 37,
+        "type": "notice",
+        "text": "You used 穹顶通行证.",
+        "createdAt": "2026-09-12T14:41:54.303Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 38,
+        "type": "notice",
+        "text": "You used 穹顶通行证.",
+        "createdAt": "2026-09-12T14:41:54.508Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 39,
+        "type": "notice",
+        "text": "You used 穹顶通行证.",
+        "createdAt": "2026-09-12T14:41:54.712Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 40,
+        "type": "notice",
+        "text": "You used 穹顶通行证.",
+        "createdAt": "2026-09-12T14:41:54.917Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 41,
+        "type": "notice",
+        "text": "You used 穹顶通行证.",
+        "createdAt": "2026-09-12T14:41:55.185Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 42,
+        "type": "notice",
+        "text": "You used 穹顶通行证.",
+        "createdAt": "2026-09-12T14:41:55.531Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 43,
+        "type": "notice",
+        "text": "You used 穹顶通行证.",
+        "createdAt": "2026-09-12T14:41:57.157Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 44,
+        "type": "notice",
+        "text": "You used 穹顶通行证.",
+        "createdAt": "2026-09-12T14:41:57.679Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 45,
+        "type": "notice",
+        "text": "You used 穹顶通行证.",
+        "createdAt": "2026-09-12T14:41:57.886Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 46,
+        "type": "notice",
+        "text": "You used 穹顶通行证.",
+        "createdAt": "2026-09-12T14:41:58.194Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 47,
+        "type": "notice",
+        "text": "You used 穹顶通行证.",
+        "createdAt": "2026-09-12T14:41:58.400Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 48,
+        "type": "notice",
+        "text": "You used 穹顶通行证.",
+        "createdAt": "2026-09-12T14:41:59.524Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 55,
+        "type": "notice",
+        "text": "You used 穹顶通行证.",
+        "createdAt": "2026-09-12T15:19:05.589Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 56,
+        "type": "notice",
+        "text": "You used 穹顶通行证.",
+        "createdAt": "2026-09-12T15:27:07.922Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 57,
+        "type": "notice",
+        "text": "You used 穹顶通行证.",
+        "createdAt": "2026-09-12T15:38:28.404Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 58,
+        "type": "notice",
+        "text": "star-ticket已给出",
+        "createdAt": "2026-09-12T15:39:24.878Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 59,
+        "type": "notice",
+        "text": "You used 穹顶通行证.",
+        "createdAt": "2026-09-12T15:51:02.571Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 63,
+        "type": "notice",
+        "text": "You used 穹顶通行证.",
+        "createdAt": "2026-09-12T23:41:55.313Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 64,
+        "type": "notice",
+        "text": "You used 穹顶通行证.",
+        "createdAt": "2026-09-12T23:41:56.485Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 65,
+        "type": "notice",
+        "text": "seal-knowledge已给出",
+        "createdAt": "2026-09-12T23:43:52.419Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 66,
+        "type": "notice",
+        "text": "seal-truth已给出",
+        "createdAt": "2026-09-12T23:45:30.367Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 67,
+        "type": "notice",
+        "text": "You used 穹顶通行证.",
+        "createdAt": "2026-09-13T00:58:51.831Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 68,
+        "type": "notice",
+        "text": "You used 穹顶通行证.",
+        "createdAt": "2026-09-13T00:58:52.241Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 69,
+        "type": "notice",
+        "text": "You used 穹顶通行证.",
+        "createdAt": "2026-09-13T00:59:48.664Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 70,
+        "type": "notice",
+        "text": "You used 穹顶通行证.",
+        "createdAt": "2026-09-13T02:12:07.985Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 71,
+        "type": "notice",
+        "text": "You used 穹顶通行证.",
+        "createdAt": "2026-09-13T02:29:16.661Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 72,
+        "type": "notice",
+        "text": "You used 穹顶通行证.",
+        "createdAt": "2026-09-13T02:29:16.905Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 73,
+        "type": "notice",
+        "text": "You used 穹顶通行证.",
+        "createdAt": "2026-09-13T02:29:17.109Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 74,
+        "type": "notice",
+        "text": "You used 穹顶通行证.",
+        "createdAt": "2026-09-13T02:37:27.276Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 75,
+        "type": "notice",
+        "text": "You used 穹顶通行证.",
+        "createdAt": "2026-09-13T02:37:27.529Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 76,
+        "type": "notice",
+        "text": "You used 穹顶通行证.",
+        "createdAt": "2026-09-13T02:37:27.711Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 77,
+        "type": "notice",
+        "text": "You used 穹顶通行证.",
+        "createdAt": "2026-09-13T02:37:27.915Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 78,
+        "type": "notice",
+        "text": "You used 穹顶通行证.",
+        "createdAt": "2026-09-13T02:37:28.076Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 79,
+        "type": "notice",
+        "text": "You used 穹顶通行证.",
+        "createdAt": "2026-09-13T02:37:28.266Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 80,
+        "type": "notice",
+        "text": "star-ticket已给出",
+        "createdAt": "2026-09-13T02:42:12.077Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 81,
+        "type": "notice",
+        "text": "You used 穹顶通行证.",
+        "createdAt": "2026-09-13T02:44:43.731Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 82,
+        "type": "notice",
+        "text": "You used 穹顶通行证.",
+        "createdAt": "2026-09-13T02:44:47.725Z",
+        "read": false,
+        "meta": {}
+      }
+    ],
+    "inventory": [
+      {
+        "id": "star-ticket",
+        "name": "穹顶通行证",
+        "qty": 2
+      }
+    ],
+    "furnishings": []
+  },
+  {
+    "name": "Tam",
+    "role": "visitor",
+    "homeFloor": null,
+    "doorplate": null,
+    "wallpaper": "default",
+    "roomSettings": {
+      "defaultAccess": "allow",
+      "whitelist": [],
+      "blacklist": []
+    },
+    "friends": [],
+    "blockedFriends": [],
+    "visitedFloors": [
+      1,
+      2,
+      3,
+      5,
+      100
+    ],
+    "systemMessages": [
+      {
+        "id": 7,
+        "type": "notice",
+        "text": "You used 示例物品1.",
+        "createdAt": "2026-09-12T09:24:21.360Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 8,
+        "type": "notice",
+        "text": "You used 求知印章.",
+        "createdAt": "2026-09-12T09:27:35.718Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 9,
+        "type": "notice",
+        "text": "You used 求知印章.",
+        "createdAt": "2026-09-12T09:28:22.930Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 10,
+        "type": "notice",
+        "text": "seal-knowledge已给出",
+        "createdAt": "2026-09-12T09:28:39.031Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 11,
+        "type": "notice",
+        "text": "seal-truth已给出",
+        "createdAt": "2026-09-12T09:30:30.826Z",
+        "read": false,
+        "meta": {}
+      }
+    ],
+    "inventory": [
+      {
+        "id": "star-ticket",
+        "name": "穹顶通行证",
+        "qty": 1
+      }
+    ],
+    "furnishings": []
+  },
+  {
+    "name": "大帝",
+    "role": "resident",
+    "homeFloor": 26,
+    "doorplate": 1,
+    "wallpaper": "violet",
+    "roomSettings": {
+      "defaultAccess": "allow",
+      "whitelist": [],
+      "blacklist": []
+    },
+    "friends": [],
+    "blockedFriends": [],
+    "visitedFloors": [
+      1,
+      5,
+      26
+    ],
+    "systemMessages": [
+      {
+        "id": 12,
+        "type": "notice",
+        "text": "You used 求知印章.",
+        "createdAt": "2026-09-12T10:29:39.583Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 13,
+        "type": "notice",
+        "text": "seal-knowledge已给出",
+        "createdAt": "2026-09-12T10:31:19.916Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 14,
+        "type": "notice",
+        "text": "seal-knowledge已给出",
+        "createdAt": "2026-09-12T10:36:33.892Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 15,
+        "type": "notice",
+        "text": "seal-truth已给出",
+        "createdAt": "2026-09-12T10:40:24.804Z",
+        "read": false,
+        "meta": {}
+      }
+    ],
+    "inventory": [
+      {
+        "id": "sample-1",
+        "name": "示例物品1",
+        "qty": 1
+      },
+      {
+        "id": "star-ticket",
+        "name": "穹顶通行证",
+        "qty": 1
+      }
+    ],
+    "furnishings": []
+  },
+  {
+    "name": "Liu",
+    "role": "visitor",
+    "homeFloor": null,
+    "doorplate": null,
+    "wallpaper": "default",
+    "roomSettings": {
+      "defaultAccess": "allow",
+      "whitelist": [],
+      "blacklist": []
+    },
+    "friends": [],
+    "blockedFriends": [],
+    "visitedFloors": [
+      1,
+      5
+    ],
+    "systemMessages": [
+      {
+        "id": 18,
+        "type": "notice",
+        "text": "seal-knowledge已给出",
+        "createdAt": "2026-09-12T11:02:41.494Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 19,
+        "type": "friend-request",
+        "text": "Kai sent you a friend request.",
+        "createdAt": "2026-09-12T11:20:44.096Z",
+        "read": false,
+        "meta": {
+          "fromName": "Kai",
+          "status": "pending"
+        }
+      }
+    ],
+    "inventory": [
+      {
+        "id": "sample-1",
+        "name": "示例物品1",
+        "qty": 1
+      }
+    ],
+    "furnishings": []
+  },
+  {
+    "name": "Kai",
+    "role": "resident",
+    "homeFloor": 1,
+    "doorplate": 8,
+    "wallpaper": "night",
+    "roomSettings": {
+      "defaultAccess": "allow",
+      "whitelist": [],
+      "blacklist": [
+        "Liu"
+      ]
+    },
+    "friends": [],
+    "blockedFriends": [],
+    "visitedFloors": [
+      1,
+      3,
+      5
+    ],
+    "systemMessages": [
+      {
+        "id": 20,
+        "type": "notice",
+        "text": "Friend request sent to Liu.",
+        "createdAt": "2026-09-12T11:20:44.096Z",
+        "read": true,
+        "meta": {
+          "toName": "Liu"
+        }
+      },
+      {
+        "id": 21,
+        "type": "notice",
+        "text": "seal-knowledge已给出",
+        "createdAt": "2026-09-12T11:27:46.083Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 22,
+        "type": "notice",
+        "text": "You used 示例物品1.",
+        "createdAt": "2026-09-12T11:29:02.577Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 23,
+        "type": "notice",
+        "text": "seal-truth已给出",
+        "createdAt": "2026-09-12T11:29:28.336Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 24,
+        "type": "notice",
+        "text": "You used 穹顶通行证.",
+        "createdAt": "2026-09-12T11:32:50.326Z",
+        "read": false,
+        "meta": {}
+      }
+    ],
+    "inventory": [
+      {
+        "id": "star-ticket",
+        "name": "穹顶通行证",
+        "qty": 1
+      }
+    ],
+    "furnishings": []
+  },
+  {
+    "name": "Lui",
+    "role": "visitor",
+    "homeFloor": null,
+    "doorplate": null,
+    "wallpaper": "default",
+    "roomSettings": {
+      "defaultAccess": "allow",
+      "whitelist": [],
+      "blacklist": []
+    },
+    "friends": [],
+    "blockedFriends": [],
+    "visitedFloors": [
+      1,
+      5
+    ],
+    "systemMessages": [],
+    "inventory": [
+      {
+        "id": "sample-1",
+        "name": "示例物品1",
+        "qty": 1
+      }
+    ],
+    "furnishings": []
+  },
+  {
+    "name": "LiuKan",
+    "role": "resident",
+    "homeFloor": 96,
+    "doorplate": 3,
+    "wallpaper": "violet",
+    "roomSettings": {
+      "defaultAccess": "allow",
+      "whitelist": [],
+      "blacklist": []
+    },
+    "friends": [],
+    "blockedFriends": [],
+    "visitedFloors": [
+      1,
+      5,
+      96
+    ],
+    "systemMessages": [
+      {
+        "id": 49,
+        "type": "notice",
+        "text": "You used 求知印章.",
+        "createdAt": "2026-09-12T15:08:26.933Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 50,
+        "type": "notice",
+        "text": "You used 求知印章.",
+        "createdAt": "2026-09-12T15:08:30.721Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 51,
+        "type": "notice",
+        "text": "seal-knowledge已给出",
+        "createdAt": "2026-09-12T15:09:50.185Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 52,
+        "type": "notice",
+        "text": "seal-truth已给出",
+        "createdAt": "2026-09-12T15:11:22.550Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 53,
+        "type": "notice",
+        "text": "You used 穹顶通行证.",
+        "createdAt": "2026-09-12T15:11:26.440Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 54,
+        "type": "notice",
+        "text": "You used 穹顶通行证.",
+        "createdAt": "2026-09-12T15:14:33.263Z",
+        "read": false,
+        "meta": {}
+      }
+    ],
+    "inventory": [
+      {
+        "id": "sample-1",
+        "name": "示例物品1",
+        "qty": 1
+      },
+      {
+        "id": "star-ticket",
+        "name": "穹顶通行证",
+        "qty": 1
+      }
+    ],
+    "furnishings": []
+  },
+  {
+    "name": "jack",
+    "role": "resident",
+    "homeFloor": 1,
+    "doorplate": 5,
+    "wallpaper": "sunset",
+    "roomSettings": {
+      "defaultAccess": "deny",
+      "whitelist": [
+        "Lyra",
+        "Nova",
+        "Atlas"
+      ],
+      "blacklist": []
+    },
+    "friends": [],
+    "blockedFriends": [],
+    "visitedFloors": [
+      1,
+      5,
+      9,
+      44,
+      59,
+      100
+    ],
+    "systemMessages": [
+      {
+        "id": 60,
+        "type": "notice",
+        "text": "seal-knowledge已给出",
+        "createdAt": "2026-09-12T16:11:03.172Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 61,
+        "type": "notice",
+        "text": "seal-truth已给出",
+        "createdAt": "2026-09-12T16:12:25.143Z",
+        "read": false,
+        "meta": {}
+      },
+      {
+        "id": 62,
+        "type": "notice",
+        "text": "You used 示例物品1.",
+        "createdAt": "2026-09-12T16:14:40.260Z",
+        "read": false,
+        "meta": {}
+      }
+    ],
+    "inventory": [
+      {
+        "id": "star-ticket",
+        "name": "穹顶通行证",
+        "qty": 1
+      }
+    ],
+    "furnishings": []
+  }
+]

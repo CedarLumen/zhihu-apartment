@@ -1,0 +1,149 @@
+{
+  "Version": 1,
+  "WorkspaceRootPath": "E:\\NodeConsoleApp2 (2)\\NodeConsoleApp2\\",
+  "Documents": [
+    {
+      "AbsoluteMoniker": "D:0:0:{1375A935-2150-7431-2E12-28C27BE8B7D8}|NodeConsoleApp2.esproj|e:\\nodeconsoleapp2 (2)\\nodeconsoleapp2\\app.js||{14D17961-FE51-464D-9111-C4AF11D7D99A}",
+      "RelativeMoniker": "D:0:0:{1375A935-2150-7431-2E12-28C27BE8B7D8}|NodeConsoleApp2.esproj|solutionrelative:app.js||{14D17961-FE51-464D-9111-C4AF11D7D99A}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{1375A935-2150-7431-2E12-28C27BE8B7D8}|NodeConsoleApp2.esproj|e:\\nodeconsoleapp2 (2)\\nodeconsoleapp2\\public\\style.css||{A5401142-F49D-43DB-90B1-F57BA349E55C}",
+      "RelativeMoniker": "D:0:0:{1375A935-2150-7431-2E12-28C27BE8B7D8}|NodeConsoleApp2.esproj|solutionrelative:public\\style.css||{A5401142-F49D-43DB-90B1-F57BA349E55C}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{1375A935-2150-7431-2E12-28C27BE8B7D8}|NodeConsoleApp2.esproj|e:\\nodeconsoleapp2 (2)\\nodeconsoleapp2\\public\\index.html||{40D31677-CBC0-4297-A9EF-89D907823A98}",
+      "RelativeMoniker": "D:0:0:{1375A935-2150-7431-2E12-28C27BE8B7D8}|NodeConsoleApp2.esproj|solutionrelative:public\\index.html||{40D31677-CBC0-4297-A9EF-89D907823A98}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{1375A935-2150-7431-2E12-28C27BE8B7D8}|NodeConsoleApp2.esproj|e:\\nodeconsoleapp2 (2)\\nodeconsoleapp2\\public\\client.js||{14D17961-FE51-464D-9111-C4AF11D7D99A}|",
+      "RelativeMoniker": "D:0:0:{1375A935-2150-7431-2E12-28C27BE8B7D8}|NodeConsoleApp2.esproj|solutionrelative:public\\client.js||{14D17961-FE51-464D-9111-C4AF11D7D99A}|"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{1375A935-2150-7431-2E12-28C27BE8B7D8}|NodeConsoleApp2.esproj|e:\\nodeconsoleapp2 (2)\\nodeconsoleapp2\\cloud_data\\agents\\rooms_claims.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}",
+      "RelativeMoniker": "D:0:0:{1375A935-2150-7431-2E12-28C27BE8B7D8}|NodeConsoleApp2.esproj|solutionrelative:cloud_data\\agents\\rooms_claims.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{1375A935-2150-7431-2E12-28C27BE8B7D8}|NodeConsoleApp2.esproj|e:\\nodeconsoleapp2 (2)\\nodeconsoleapp2\\cloud_data\\agents\\assignments.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}",
+      "RelativeMoniker": "D:0:0:{1375A935-2150-7431-2E12-28C27BE8B7D8}|NodeConsoleApp2.esproj|solutionrelative:cloud_data\\agents\\assignments.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{1375A935-2150-7431-2E12-28C27BE8B7D8}|NodeConsoleApp2.esproj|e:\\nodeconsoleapp2 (2)\\nodeconsoleapp2\\.editorconfig||{3B902123-F8A7-4915-9F01-361F908088D0}|",
+      "RelativeMoniker": "D:0:0:{1375A935-2150-7431-2E12-28C27BE8B7D8}|NodeConsoleApp2.esproj|solutionrelative:.editorconfig||{3B902123-F8A7-4915-9F01-361F908088D0}|"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{1375A935-2150-7431-2E12-28C27BE8B7D8}|NodeConsoleApp2.esproj|e:\\nodeconsoleapp2 (2)\\nodeconsoleapp2\\package.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}",
+      "RelativeMoniker": "D:0:0:{1375A935-2150-7431-2E12-28C27BE8B7D8}|NodeConsoleApp2.esproj|solutionrelative:package.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}"
+    }
+  ],
+  "DocumentGroupContainers": [
+    {
+      "Orientation": 0,
+      "VerticalTabListWidth": 256,
+      "DocumentGroups": [
+        {
+          "DockedWidth": 200,
+          "SelectedChildIndex": 3,
+          "Children": [
+            {
+              "$type": "Document",
+              "DocumentIndex": 2,
+              "Title": "index.html",
+              "DocumentMoniker": "E:\\NodeConsoleApp2 (2)\\NodeConsoleApp2\\public\\index.html",
+              "RelativeDocumentMoniker": "public\\index.html",
+              "ToolTip": "E:\\NodeConsoleApp2 (2)\\NodeConsoleApp2\\public\\index.html",
+              "RelativeToolTip": "public\\index.html",
+              "ViewState": "AgIAAMEAAAAAAAAAAAA0wNgAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001512|",
+              "WhenOpened": "2026-09-10T08:48:23.182Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "style.css",
+              "DocumentMoniker": "E:\\NodeConsoleApp2 (2)\\NodeConsoleApp2\\public\\style.css",
+              "RelativeDocumentMoniker": "public\\style.css",
+              "ToolTip": "E:\\NodeConsoleApp2 (2)\\NodeConsoleApp2\\public\\style.css",
+              "RelativeToolTip": "public\\style.css",
+              "ViewState": "AgIAAMQEAAAAAAAAAAA0wNoEAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.003000|",
+              "WhenOpened": "2026-09-10T08:48:38.754Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 3,
+              "Title": "client.js",
+              "DocumentMoniker": "E:\\NodeConsoleApp2 (2)\\NodeConsoleApp2\\public\\client.js",
+              "RelativeDocumentMoniker": "public\\client.js",
+              "ToolTip": "E:\\NodeConsoleApp2 (2)\\NodeConsoleApp2\\public\\client.js",
+              "RelativeToolTip": "public\\client.js",
+              "ViewState": "AgIAADYPAAAAAAAAAAAzwEwPAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001646|",
+              "WhenOpened": "2026-09-10T08:49:30.886Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "app.js",
+              "DocumentMoniker": "E:\\NodeConsoleApp2 (2)\\NodeConsoleApp2\\app.js",
+              "RelativeDocumentMoniker": "app.js",
+              "ToolTip": "E:\\NodeConsoleApp2 (2)\\NodeConsoleApp2\\app.js*",
+              "RelativeToolTip": "app.js*",
+              "ViewState": "AgIAAN4JAAAAAAAAAAAzwOUJAAAmAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001646|",
+              "WhenOpened": "2026-09-10T08:40:24.392Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 5,
+              "Title": "assignments.json",
+              "DocumentMoniker": "E:\\NodeConsoleApp2 (2)\\NodeConsoleApp2\\cloud_data\\agents\\assignments.json",
+              "RelativeDocumentMoniker": "cloud_data\\agents\\assignments.json",
+              "ToolTip": "E:\\NodeConsoleApp2 (2)\\NodeConsoleApp2\\cloud_data\\agents\\assignments.json",
+              "RelativeToolTip": "cloud_data\\agents\\assignments.json",
+              "ViewState": "AgIAAAEAAAAAAAAAAAAAAHAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001642|",
+              "WhenOpened": "2026-09-11T02:48:40.919Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 4,
+              "Title": "rooms_claims.json",
+              "DocumentMoniker": "E:\\NodeConsoleApp2 (2)\\NodeConsoleApp2\\cloud_data\\agents\\rooms_claims.json",
+              "RelativeDocumentMoniker": "cloud_data\\agents\\rooms_claims.json",
+              "ToolTip": "E:\\NodeConsoleApp2 (2)\\NodeConsoleApp2\\cloud_data\\agents\\rooms_claims.json",
+              "RelativeToolTip": "cloud_data\\agents\\rooms_claims.json",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAA4AAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001642|",
+              "WhenOpened": "2026-09-11T02:48:46.631Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 6,
+              "Title": ".editorconfig",
+              "DocumentMoniker": "E:\\NodeConsoleApp2 (2)\\NodeConsoleApp2\\.editorconfig",
+              "RelativeDocumentMoniker": ".editorconfig",
+              "ToolTip": "E:\\NodeConsoleApp2 (2)\\NodeConsoleApp2\\.editorconfig",
+              "RelativeToolTip": ".editorconfig",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAsAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
+              "WhenOpened": "2026-09-10T11:41:54.43Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 7,
+              "Title": "package.json",
+              "DocumentMoniker": "E:\\NodeConsoleApp2 (2)\\NodeConsoleApp2\\package.json",
+              "RelativeDocumentMoniker": "package.json",
+              "ToolTip": "E:\\NodeConsoleApp2 (2)\\NodeConsoleApp2\\package.json",
+              "RelativeToolTip": "package.json",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001642|",
+              "WhenOpened": "2026-09-10T08:49:43.06Z"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

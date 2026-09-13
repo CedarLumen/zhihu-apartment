@@ -1,0 +1,2816 @@
+﻿const joinPanel = document.getElementById('joinPanel');
+const chatPanel = document.getElementById('chatPanel');
+
+const nameInput = document.getElementById('nameInput');
+const roleSelect = document.getElementById('roleSelect');
+const residentFields = document.getElementById('residentFields');
+const homeFloorSelect = document.getElementById('homeFloorSelect');
+const doorplateSelect = document.getElementById('doorplateSelect');
+const areaSelect = document.getElementById('areaSelect');
+const restoreHistoryCheckbox = document.getElementById('restoreHistoryCheckbox');
+const joinBtn = document.getElementById('joinBtn');
+
+const selfInfo = document.getElementById('selfInfo');
+const locationInfo = document.getElementById('locationInfo');
+
+const scenePanel = document.getElementById('scenePanel');
+const gameCanvas = document.getElementById('gameCanvas');
+const imeNameInput = document.getElementById('imeNameInput');
+const imeChatInput = document.getElementById('imeChatInput');
+const sceneHint = document.getElementById('sceneHint');
+const sceneCtx = gameCanvas.getContext('2d');
+
+const usersList = document.getElementById('usersList');
+const messages = document.getElementById('messages');
+
+const TILE_SIZE = 32;
+const DOOR_WIDTH = 32;
+const DOOR_HEIGHT = 64;
+const FLOOR_Y = 208;
+const DOOR_START_X = 80;
+const DOOR_SPACING = 84;
+const STAIRS_OFFSET_X = 120;
+const COMMUNITY_SPACE_OFFSET_X = STAIRS_OFFSET_X + DOOR_SPACING;
+const PLAYER_SPEED = 190;
+const PLAYER_ACCELERATION = 950;
+const PLAYER_GROUND_DRAG = 3.5;
+const PLAYER_AIR_DRAG = 3.5;
+const PLAYER_JUMP_VELOCITY = -420;
+const PLAYER_GRAVITY = 1200;
+const JUMP_BUFFER_SECONDS = 0.14;
+const HIDDEN_PHYSICS_INTERVAL_MS = 50;
+const INTERACT_DISTANCE = 34;
+const ROOM_WIDTH_TILES = 20;
+const ROOM_HEIGHT_TILES = 5;
+const ROOM_TOP_Y = 32;
+const STAIRS_LABEL = '\u697c\u68af\u95f4';
+const COMMUNITY_SPACE_LABEL = '\u793e\u533a\u7a7a\u95f4';
+const EXIT_LABEL = '\u51fa\u53e3';
+const COMMUNITY_SPACE_ROOM_ID = 'community-space';
+const CHAT_OPEN_KEY = 'T';
+const CLAIM_KEY = 'R';
+const CLEAR_HISTORY_KEY = 'H';
+const TELEPORT_KEY = 'G';
+const NOTICE_DURATION_MS = 2600;
+const UI_BUTTON_SIZE = 36;
+const UI_BUTTON_GAP = 10;
+
+const player = {
+  x: DOOR_START_X,
+  y: FLOOR_Y,
+  velocityX: 0,
+  velocityY: 0,
+  moveLeft: false,
+  moveRight: false
+};
+
+let ws;
+let layout;
+let sceneState = null;
+let textures = {};
+let sounds = {};
+let bootError = '';
+let lastFrame = 0;
+let currentUserId = null;
+let isJoined = false;
+let lastSentPositionAt = 0;
+let lastSentX = null;
+let lastSentY = null;
+let canSyncPlayerPosition = true;
+let isStairsMenuOpen = false;
+let stairsMenuOptions = [];
+let stairsMenuIndex = 0;
+let isChatPanelOpen = false;
+let isRoomSettingsOpen = false;
+let chatInputText = '';
+let isJoinNameComposing = false;
+let isChatComposing = false;
+const chatLog = [];
+let currentAgentId = null;
+let currentAgentName = null;
+let isAgentChat = false;
+let jumpBufferRemaining = 0;
+const canvasNotices = [];
+let uiButtons = [];
+let areaUserDirectory = [];
+let friendList = [];
+let blockedFriendList = [];
+let systemMessagesData = [];
+let unreadSystemMessageCount = 0;
+let onlineFriendLocations = [];
+let myRoomSettings = {
+  defaultAccess: 'allow',
+  whitelist: [],
+  blacklist: []
+};
+let roomSettingsUserIndex = 0;
+let isRoomSettingsDirty = false;
+let isSystemMessagesOpen = false;
+let systemMessageIndex = 0;
+let systemMessageScrollOffset = 0;
+let isFriendPanelOpen = false;
+let friendPanelIndex = 0;
+let friendPanelScrollOffset = 0;
+let isTeleportMenuOpen = false;
+let teleportOptions = [];
+let teleportIndex = 0;
+let teleportScrollOffset = 0;
+let roomSettingsScrollOffset = 0;
+let chatPanelScrollOffset = 0;
+let inventoryList = [];
+let inventoryIndex = 0;
+let inventoryScrollOffset = 0;
+const INVENTORY_VISIBLE_ROWS = 5;
+let roomFurnishings = [];
+
+const joinUi = {
+  name: '',
+  role: 'visitor',
+  homeFloor: 1,
+  doorplate: 1,
+  areaId: '',
+  restoreHistory: true,
+  focusIndex: 0
+};
+
+const POSITION_SYNC_INTERVAL_MS = 50;
+
+function renderHistory(history) {
+  messages.innerHTML = '';
+  chatLog.length = 0;
+  history.forEach(m => {
+    addMessage(m.sender, m.text, m.sender === 'System');
+  });
+  // Keep DOM scroll according to chatPanelScrollOffset
+  const rowHeight = 20;
+  const maxChatOffset = Math.max(0, chatLog.length - 8);
+  const offset = clamp(chatPanelScrollOffset, 0, maxChatOffset);
+  if (offset === 0) {
+    messages.scrollTop = messages.scrollHeight;
+  } else {
+    messages.scrollTop = Math.max(0, messages.scrollHeight - offset * rowHeight);
+  }
+
+}
+
+function getWrappedLines(text, maxWidth) {
+  const words = String(text).split(/\s+/);
+  const lines = [];
+  let line = '';
+  for (let n = 0; n < words.length; n++) {
+    const testLine = line ? `${line} ${words[n]}` : words[n];
+    const metrics = sceneCtx.measureText(testLine);
+    const testWidth = metrics.width;
+    if (testWidth > maxWidth && line) {
+      lines.push(line);
+      line = words[n];
+    } else {
+      line = testLine;
+    }
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
+function wrapTextToLines(text, maxWidth) {
+  // normalize HTML <br> to newlines and split into paragraphs
+  const normalized = String(text).replace(/<br\s*\/?>/gi, '\n');
+  const paragraphs = normalized.split(/\r?\n/);
+  const out = [];
+  for (let p = 0; p < paragraphs.length; p += 1) {
+    const para = paragraphs[p];
+    if (!para) {
+      // preserve blank line
+      out.push('');
+      continue;
+    }
+    const wrapped = getWrappedLines(para, maxWidth);
+    if (wrapped.length) {
+      out.push(...wrapped);
+    } else {
+      out.push('');
+    }
+  }
+  return out;
+}
+
+// Basic Markdown renderer (safe-ish): supports **bold**, *italic*, `code`, and [link](http...)
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function renderMarkdown(text) {
+  if (!text) return '';
+  // escape first
+  let out = escapeHtml(text);
+  // links [text](url) only allow http(s)
+  out = out.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, (m, t, u) => {
+    const safeUrl = escapeHtml(u);
+    return `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer">${escapeHtml(t)}</a>`;
+  });
+  // bold **text**
+  out = out.replace(/\*\*([^*]+)\*\*/g, (m, t) => `<strong>${t}</strong>`);
+  // italic *text*
+  out = out.replace(/\*([^*]+)\*/g, (m, t) => `<em>${t}</em>`);
+  // inline code `code`
+  out = out.replace(/`([^`]+)`/g, (m, t) => `<code>${escapeHtml(t)}</code>`);
+  // preserve newlines
+  out = out.replace(/\r?\n/g, '<br>');
+  return out;
+}
+
+function useSelectedItem() {
+  if (!isJoined || !inventoryList || !inventoryList.length) return false;
+  const item = inventoryList[ inventoryIndex ];
+  if (!item) return false;
+  send('use-item', { itemId: item.id, slot: inventoryIndex });
+  return true;
+}
+
+function renderSystemMessagesPanel() {
+  if (!isSystemMessagesOpen) {
+    return;
+  }
+
+  const width = 620;
+  const height = 300;
+  const left = Math.round((gameCanvas.width - width) / 2);
+  const top = Math.round((gameCanvas.height - height) / 2);
+  drawOverlayPanel(left, top, width, height);
+
+  const messages = normalizeSystemMessages(systemMessagesData).slice().reverse();
+  systemMessageIndex = clamp(systemMessageIndex, 0, Math.max(0, messages.length - 1));
+  const selected = messages[systemMessageIndex] || null;
+
+  sceneCtx.fillStyle = '#fff';
+  sceneCtx.font = '16px "Microsoft YaHei", "PingFang SC", sans-serif';
+  sceneCtx.fillText('System Messages', left + 16, top + 28);
+  sceneCtx.font = '13px "Microsoft YaHei", "PingFang SC", sans-serif';
+  sceneCtx.fillStyle = '#cfd8dc';
+  sceneCtx.fillText('↑/↓ Select  Mouse Wheel Scroll  A Approve  D Reject  Esc Close', left + 16, top + height - 18);
+
+  if (!messages.length) {
+    sceneCtx.fillStyle = '#b0bec5';
+    sceneCtx.fillText('No system messages.', left + 16, top + 66);
+    return;
+  }
+
+  const visibleRows = 9;
+  // Build a flattened list of lines for all messages so scrolling and
+  // visibility can be handled per-line (messages have variable line counts).
+  const LINE_HEIGHT = 20;
+  const linesArray = [];
+  const msgStartLineIndex = new Array(messages.length).fill(0);
+  for (let mi = 0; mi < messages.length; mi += 1) {
+    const item = messages[mi];
+    const isSelectedMsg = selected && selected.id === item.id;
+    const status = item.type === 'friend-request' ? `[${item.meta?.status || 'pending'}] ` : '';
+    const prefix = isSelectedMsg ? '> ' : '  ';
+    const text = `${prefix}${status}${item.text}`;
+    const wrapped = wrapTextToLines(text, width - 44);
+    msgStartLineIndex[mi] = linesArray.length;
+    for (let li = 0; li < wrapped.length; li += 1) {
+      linesArray.push({ msgIndex: mi, text: wrapped[li] });
+    }
+  }
+
+  const totalLines = linesArray.length;
+  // compute how many rows fit inside panel body area
+  const headerSpace = 58; // same offset used previously
+  const availableHeight = height - (headerSpace - 28) - 40; // leave some footer padding
+  const rowsPerPage = Math.max(1, Math.floor(availableHeight / LINE_HEIGHT));
+
+  // Ensure the selected message is visible: compute its line range and adjust offset
+  let startLine = clamp(systemMessageScrollOffset, 0, Math.max(0, totalLines - rowsPerPage));
+  if (selected) {
+    const selIndex = messages.findIndex(m => m && m.id === selected.id);
+    if (selIndex >= 0) {
+      const selStart = msgStartLineIndex[selIndex];
+      // find selEnd (next msg start or totalLines)
+      const selEnd = (selIndex + 1 < messages.length) ? msgStartLineIndex[selIndex + 1] : totalLines;
+      if (selStart < startLine) {
+        startLine = selStart;
+      } else if (selEnd > startLine + rowsPerPage) {
+        startLine = Math.max(0, selEnd - rowsPerPage);
+      }
+    }
+  }
+  // persist back
+  systemMessageScrollOffset = startLine;
+
+  const endLine = Math.min(totalLines, startLine + rowsPerPage);
+  let y = top + headerSpace;
+
+  // For selected message highlight, compute its overall line range
+  let selectedLineStart = -1;
+  let selectedLineEnd = -1;
+  if (selected) {
+    const sidx = messages.findIndex(m => m && m.id === selected.id);
+    if (sidx >= 0) {
+      selectedLineStart = msgStartLineIndex[sidx];
+      selectedLineEnd = (sidx + 1 < messages.length) ? msgStartLineIndex[sidx + 1] : totalLines;
+    }
+  }
+
+  const visSelStart = selectedLineStart >= 0 ? Math.max(startLine, selectedLineStart) : -1;
+  const visSelEnd = selectedLineEnd >= 0 ? Math.min(endLine, selectedLineEnd) : -1;
+  // draw visible lines
+  for (let li = startLine; li < endLine; li += 1) {
+    const entry = linesArray[li];
+    // draw selection background once at the first visible selected line
+    if (visSelStart >= 0 && li === visSelStart) {
+      const blockLines = visSelEnd - visSelStart;
+      const blockTop = top + headerSpace + (visSelStart - startLine) * LINE_HEIGHT - 14;
+      const blockHeight = blockLines * LINE_HEIGHT + 4;
+      sceneCtx.fillStyle = 'rgba(111, 168, 220, 0.35)';
+      sceneCtx.fillRect(left + 14, blockTop, width - 28, blockHeight);
+    }
+    // choose style for this line based on message read state
+    const msg = messages[entry.msgIndex];
+    const isSelMsg = selected && entry.msgIndex === messages.findIndex(m => m && m.id === selected.id);
+    sceneCtx.fillStyle = isSelMsg ? '#fff' : (msg.read ? '#cfd8dc' : '#9be6ff');
+    sceneCtx.fillText(entry.text, left + 20, y);
+    y += LINE_HEIGHT;
+    // add a small gap after the end of a message block to separate messages
+    const nextEntry = (li + 1 < linesArray.length) ? linesArray[li + 1] : null;
+    if (!nextEntry || nextEntry.msgIndex !== entry.msgIndex) {
+      y += 6; // gap between messages
+    }
+  }
+}
+
+function renderFriendPanel() {
+  if (!isFriendPanelOpen) {
+    return;
+  }
+
+  const width = 560;
+  const height = 280;
+  const left = Math.round((gameCanvas.width - width) / 2);
+  const top = Math.round((gameCanvas.height - height) / 2);
+  drawOverlayPanel(left, top, width, height);
+
+  const candidates = getFriendPanelCandidates();
+  friendPanelIndex = clamp(friendPanelIndex, 0, Math.max(0, candidates.length - 1));
+  const selected = candidates[friendPanelIndex] || null;
+
+  sceneCtx.fillStyle = '#fff';
+  sceneCtx.font = '16px "Microsoft YaHei", "PingFang SC", sans-serif';
+  sceneCtx.fillText('Friends', left + 16, top + 28);
+  sceneCtx.font = '13px "Microsoft YaHei", "PingFang SC", sans-serif';
+  sceneCtx.fillStyle = '#cfd8dc';
+  sceneCtx.fillText('↑/↓ Select  Mouse Wheel Scroll  Enter Add Friend  B Block/Unblock  N Input Name  Esc Close', left + 16, top + height - 18);
+
+  if (!candidates.length) {
+    sceneCtx.fillStyle = '#b0bec5';
+    sceneCtx.fillText('No friends or players available.', left + 16, top + 70);
+  }
+
+  const visibleRows = 8;
+  friendPanelScrollOffset = ensureIndexVisible(friendPanelIndex, visibleRows, candidates.length, friendPanelScrollOffset);
+  const start = friendPanelScrollOffset;
+  const end = Math.min(candidates.length, start + visibleRows);
+
+  // Render each candidate, supporting wrapped / multi-line names/status
+  const LINE_HEIGHT = 20;
+  let curY = top + 64;
+  for (let i = start; i < end; i += 1) {
+    const user = candidates[i];
+    const isSelected = selected && selected.id === user.id;
+    const isFriend = user.kind === 'friend';
+    const status = user.kind === 'friend'
+      ? user.online
+        ? user.blocked
+          ? ' (friend, online, blocked)'
+          : ' (friend, online)'
+        : user.blocked
+          ? ' (friend, offline, blocked)'
+          : ' (friend, offline)'
+      : ' (player)';
+    const text = `${isSelected ? '> ' : '  '}${user.name}${status}`;
+
+    const maxTextWidth = width - 44; // left padding + right padding
+    const lines = wrapTextToLines(text, maxTextWidth);
+    const itemHeight = lines.length * LINE_HEIGHT;
+
+    if (isSelected) {
+      sceneCtx.fillStyle = 'rgba(111, 168, 220, 0.35)';
+      sceneCtx.fillRect(left + 14, curY - 14, width - 28, itemHeight + 4);
+    }
+
+    sceneCtx.fillStyle = isSelected ? '#fff' : '#cfd8dc';
+    for (let k = 0; k < lines.length; k += 1) {
+      sceneCtx.fillText(lines[k], left + 20, curY + k * LINE_HEIGHT);
+    }
+
+    curY += itemHeight + 4;
+  }
+}
+
+function renderTeleportPanel() {
+  if (!isTeleportMenuOpen) {
+    return;
+  }
+
+  teleportOptions = buildTeleportOptions();
+  teleportIndex = clamp(teleportIndex, 0, Math.max(0, teleportOptions.length - 1));
+  const selected = teleportOptions[teleportIndex] || null;
+
+  const width = 660;
+  const height = 300;
+  const left = Math.round((gameCanvas.width - width) / 2);
+  const top = Math.round((gameCanvas.height - height) / 2);
+  drawOverlayPanel(left, top, width, height);
+
+  sceneCtx.fillStyle = '#fff';
+  sceneCtx.font = '16px "Microsoft YaHei", "PingFang SC", sans-serif';
+  sceneCtx.fillText('Teleport', left + 16, top + 28);
+  sceneCtx.font = '13px "Microsoft YaHei", "PingFang SC", sans-serif';
+  sceneCtx.fillStyle = '#cfd8dc';
+  sceneCtx.fillText('↑/↓ Select  Mouse Wheel Scroll  Enter Teleport  Esc Close', left + 16, top + height - 18);
+
+  if (!teleportOptions.length) {
+    sceneCtx.fillStyle = '#b0bec5';
+    sceneCtx.fillText('No available teleport destinations.', left + 16, top + 66);
+    return;
+  }
+
+  const visibleRows = 9;
+  teleportScrollOffset = ensureIndexVisible(teleportIndex, visibleRows, teleportOptions.length, teleportScrollOffset);
+  const start = teleportScrollOffset;
+  const end = Math.min(teleportOptions.length, start + visibleRows);
+
+  // Render teleport options with wrapping support
+  const LINE_HEIGHT = 20;
+  let curY = top + 58;
+  for (let i = start; i < end; i += 1) {
+    const item = teleportOptions[i];
+    const isSelected = selected === item;
+    const text = `${isSelected ? '> ' : '  '}${item.label}`;
+    const maxTextWidth = width - 44;
+    const lines = wrapTextToLines(text, maxTextWidth);
+    const itemHeight = lines.length * LINE_HEIGHT;
+
+    if (isSelected) {
+      sceneCtx.fillStyle = 'rgba(111, 168, 220, 0.35)';
+      sceneCtx.fillRect(left + 14, curY - 14, width - 28, itemHeight + 4);
+    }
+    sceneCtx.fillStyle = item.disabled ? '#8a8a8a' : (isSelected ? '#fff' : '#cfd8dc');
+    for (let k = 0; k < lines.length; k += 1) {
+      sceneCtx.fillText(lines[k], left + 20, curY + k * LINE_HEIGHT);
+    }
+
+    curY += itemHeight + 4;
+  }
+}
+
+function updateChatImeInput() {
+  if (!imeChatInput) {
+    return;
+  }
+
+  if (!isJoined) {
+    imeChatInput.classList.add('hidden');
+    imeChatInput.blur();
+    return;
+  }
+
+  imeChatInput.classList.toggle('hidden', !isChatPanelOpen);
+
+  if (!isChatComposing && imeChatInput.value !== chatInputText) {
+    imeChatInput.value = chatInputText;
+  }
+
+  if (isChatPanelOpen && document.activeElement !== imeChatInput) {
+    imeChatInput.focus();
+    imeChatInput.setSelectionRange(imeChatInput.value.length, imeChatInput.value.length);
+  }
+  if (!isChatPanelOpen && document.activeElement === imeChatInput) {
+    imeChatInput.blur();
+  }
+}
+
+function addMessage(sender, text, isSystem = false) {
+  const item = document.createElement('div');
+  item.className = `msg ${isSystem ? 'sys' : ''}`;
+  // render sender and markdown-enabled text
+  const rendered = `<strong>${escapeHtml(String(sender || ''))}:</strong> ${renderMarkdown(String(text || ''))}`;
+  item.innerHTML = rendered;
+  messages.appendChild(item);
+  // Only auto-scroll DOM messages when not scrolled up
+  const rowHeight = 20;
+  if (!chatPanelScrollOffset || chatPanelScrollOffset <= 0) {
+    messages.scrollTop = messages.scrollHeight;
+  } else {
+    const maxChatOffset = Math.max(0, chatLog.length - 8);
+    const offset = clamp(chatPanelScrollOffset, 0, maxChatOffset);
+    messages.scrollTop = Math.max(0, messages.scrollHeight - offset * rowHeight);
+    // new message increases chat content; keep the same offset (older view)
+    chatPanelScrollOffset = Math.min(maxChatOffset, offset + 1);
+  }
+
+  chatLog.push({ sender, text, isSystem });
+  if (chatLog.length > 120) {
+    chatLog.shift();
+  }
+}
+
+function areaName(areaId) {
+  if (areaId === 'lobby-1') return 'Lobby 1';
+  if (areaId === 'lobby-2') return 'Lobby 2';
+  if (areaId.startsWith('floor-')) return `Floor ${areaId.split('-')[1]}`;
+  return areaId;
+}
+
+function roomName(roomId) {
+  if (roomId === 'main') return 'Lobby';
+  if (roomId === 'corridor') return 'Corridor';
+  if (roomId === COMMUNITY_SPACE_ROOM_ID || roomId === roomIdFromLayout()) {
+    // rename floor-1 community space to 智能体广场
+    if (sceneState?.areaId === 'floor-1') return '\u667a\u80fd\u4f53\u5e73';
+    return 'Community Space';
+  }
+  if (roomId.startsWith('room-')) return `Doorplate ${roomId.split('-')[1]} Room`;
+  return roomId;
+}
+
+function roomIdFromLayout() {
+  return layout?.communitySpaceRoomId || COMMUNITY_SPACE_ROOM_ID;
+}
+
+function normalizeSystemMessages(messages) {
+  if (!Array.isArray(messages)) {
+    return [];
+  }
+  return messages
+    .filter(item => item && typeof item === 'object')
+    .map(item => ({
+      id: Number(item.id),
+      type: String(item.type || ''),
+      text: String(item.text || ''),
+      createdAt: String(item.createdAt || ''),
+      read: item.read === true,
+      meta: item.meta && typeof item.meta === 'object' ? item.meta : {}
+    }))
+    .filter(item => Number.isInteger(item.id) && item.text);
+}
+
+function nameKey(name) {
+  return String(name || '').trim().toLowerCase();
+}
+
+function isNameInList(list, name) {
+  const key = nameKey(name);
+  return Array.isArray(list) && !!key && list.some(item => nameKey(item) === key);
+}
+
+function ensureIndexVisible(index, visibleCount, totalCount, offset) {
+  const maxOffset = Math.max(0, totalCount - visibleCount);
+  let nextOffset = clamp(offset, 0, maxOffset);
+  if (index < nextOffset) {
+    nextOffset = index;
+  }
+  if (index >= nextOffset + visibleCount) {
+    nextOffset = index - visibleCount + 1;
+  }
+  return clamp(nextOffset, 0, maxOffset);
+}
+
+function getPendingSystemMessages() {
+  return systemMessagesData.filter(item => item.type === 'friend-request' && item.meta?.status === 'pending');
+}
+
+function getFriendPanelCandidates() {
+  const onlineMap = new Map((onlineFriendLocations || [])
+    .filter(item => item && item.name)
+    .map(item => [nameKey(item.name), item]));
+
+  const entries = [];
+  const seen = new Set();
+
+  (friendList || []).forEach(friendName => {
+    const key = nameKey(friendName);
+    if (!key || seen.has(key)) {
+      return;
+    }
+    seen.add(key);
+    const online = onlineMap.get(key) || null;
+    const blocked = isNameInList(blockedFriendList, friendName);
+    entries.push({
+      id: `friend:${key}`,
+      kind: 'friend',
+      name: String(friendName),
+      online: !!online,
+      blocked,
+      canTeleport: online ? online.canTeleport !== false : false,
+      areaId: online?.areaId || null,
+      roomId: online?.roomId || null
+    });
+  });
+
+  (sceneState?.roomUsers || []).forEach(user => {
+    if (!user || user.id === currentUserId || isNameInList(friendList, user.name)) {
+      return;
+    }
+    const key = nameKey(user.name);
+    if (!key || seen.has(key)) {
+      return;
+    }
+    seen.add(key);
+    entries.push({
+      id: `player:${user.id || key}`,
+      kind: 'player',
+      name: user.name
+    });
+  });
+
+  return entries;
+}
+
+function buildTeleportOptions() {
+  const options = [];
+  const visited = Array.isArray(sceneState?.visitedFloors) ? sceneState.visitedFloors : [];
+  visited.forEach(floor => {
+    options.push({ kind: 'floor', floor: Number(floor), label: `Floor ${floor} Corridor` });
+  });
+
+  (onlineFriendLocations || []).forEach(friend => {
+    const area = areaName(friend.areaId || '-');
+    const room = roomName(friend.roomId || '-');
+    const blocked = isNameInList(blockedFriendList, friend.name);
+    options.push({
+      kind: 'friend',
+      friendName: friend.name,
+      disabled: blocked || friend.canTeleport === false,
+      label: `Friend ${friend.name}: ${area} / ${room}${blocked ? ' (Blocked)' : friend.canTeleport === false ? ' (Denied)' : ''}`
+    });
+  });
+  return options;
+}
+
+function fillOptions() {
+  const areas = [
+    ...layout.lobbies.map(x => ({ value: x.id, label: `${x.name} (cap ${x.capacity})` })),
+    ...layout.floors.map(x => ({
+      value: `floor-${x}`,
+      label: `Floor ${x} (resident ${layout.residentCapacity}/visitor ${layout.visitorCapacity})`
+    }))
+  ];
+
+  areaSelect.innerHTML = '';
+  areas.forEach(item => {
+    const option = document.createElement('option');
+    option.value = item.value;
+    option.textContent = item.label;
+    areaSelect.appendChild(option);
+  });
+
+  homeFloorSelect.innerHTML = '';
+  layout.floors.forEach(x => {
+    const option = document.createElement('option');
+    option.value = String(x);
+    option.textContent = `Floor ${x}`;
+    homeFloorSelect.appendChild(option);
+  });
+
+  doorplateSelect.innerHTML = '';
+  for (let i = 1; i <= layout.residentCapacity; i += 1) {
+    const option = document.createElement('option');
+    option.value = String(i);
+    option.textContent = String(i);
+    doorplateSelect.appendChild(option);
+  }
+
+}
+
+function buildStairsMenuOptions() {
+  if (!layout) {
+    return [];
+  }
+  return [
+    ...layout.lobbies.map(lobby => ({ areaId: lobby.id, label: lobby.name })),
+    ...layout.floors.map(floor => ({ areaId: `floor-${floor}`, label: `Floor ${floor}` }))
+  ];
+}
+
+function getAreaOptions() {
+  if (!layout) {
+    return [];
+  }
+  return [
+    ...layout.lobbies.map(x => ({ value: x.id, label: `${x.name} (cap ${x.capacity})` })),
+    ...layout.floors.map(x => ({
+      value: `floor-${x}`,
+      label: `Floor ${x} (resident ${layout.residentCapacity}/visitor ${layout.visitorCapacity})`
+    }))
+  ];
+}
+
+function getJoinFields() {
+  const fields = [
+    { key: 'name', label: 'User Name', type: 'text' },
+    { key: 'role', label: 'User Role', type: 'select' }
+  ];
+  if (joinUi.role === 'resident') {
+    fields.push({ key: 'homeFloor', label: 'Resident Floor', type: 'select' });
+    fields.push({ key: 'doorplate', label: 'Doorplate', type: 'select' });
+  }
+  fields.push({ key: 'areaId', label: 'Start Area', type: 'select' });
+  fields.push({ key: 'restoreHistory', label: 'Restore 30 days history', type: 'checkbox' });
+  fields.push({ key: 'join', label: 'Join', type: 'button' });
+  return fields;
+}
+
+function clampJoinFocus() {
+  const fields = getJoinFields();
+  joinUi.focusIndex = clamp(joinUi.focusIndex, 0, fields.length - 1);
+}
+
+function cycleJoinValue(fieldKey, delta) {
+  if (fieldKey === 'role') {
+    joinUi.role = joinUi.role === 'visitor' ? 'resident' : 'visitor';
+    clampJoinFocus();
+    return;
+  }
+  if (fieldKey === 'homeFloor' && layout?.floors?.length) {
+    const index = layout.floors.indexOf(joinUi.homeFloor);
+    const next = (index + delta + layout.floors.length) % layout.floors.length;
+    joinUi.homeFloor = layout.floors[next];
+    return;
+  }
+  if (fieldKey === 'doorplate' && layout?.residentCapacity) {
+    const max = layout.residentCapacity;
+    const value = ((joinUi.doorplate - 1 + delta + max) % max) + 1;
+    joinUi.doorplate = value;
+    return;
+  }
+  if (fieldKey === 'areaId') {
+    const options = getAreaOptions();
+    if (!options.length) {
+      return;
+    }
+    const index = Math.max(0, options.findIndex(x => x.value === joinUi.areaId));
+    const next = (index + delta + options.length) % options.length;
+    joinUi.areaId = options[next].value;
+  }
+}
+
+function joinFromCanvas() {
+  nameInput.value = joinUi.name;
+  roleSelect.value = joinUi.role;
+  homeFloorSelect.value = String(joinUi.homeFloor);
+  doorplateSelect.value = String(joinUi.doorplate);
+  areaSelect.value = joinUi.areaId;
+  restoreHistoryCheckbox.checked = joinUi.restoreHistory;
+
+  const payload = {
+    name: joinUi.name,
+    role: joinUi.role,
+    areaId: joinUi.areaId,
+    restoreHistory: joinUi.restoreHistory
+  };
+  if (joinUi.role === 'resident') {
+    payload.homeFloor = Number(joinUi.homeFloor);
+    payload.doorplate = Number(joinUi.doorplate);
+  }
+  send('join', payload);
+}
+
+function updateJoinImeInput() {
+  if (!imeNameInput) {
+    return;
+  }
+
+  if (isJoined) {
+    imeNameInput.classList.add('hidden');
+    imeNameInput.blur();
+    return;
+  }
+
+  const fields = getJoinFields();
+  const focused = fields[joinUi.focusIndex];
+  const shouldShow = focused?.key === 'name';
+  imeNameInput.classList.toggle('hidden', !shouldShow);
+
+  if (!isJoinNameComposing && imeNameInput.value !== joinUi.name) {
+    imeNameInput.value = joinUi.name;
+  }
+
+  if (shouldShow && document.activeElement !== imeNameInput) {
+    imeNameInput.focus();
+    imeNameInput.setSelectionRange(imeNameInput.value.length, imeNameInput.value.length);
+  }
+  if (!shouldShow && document.activeElement === imeNameInput) {
+    imeNameInput.blur();
+  }
+}
+
+function stopMovement() {
+  player.moveLeft = false;
+  player.moveRight = false;
+}
+
+function openStairsMenu() {
+  if (!sceneState || !layout) {
+    return;
+  }
+  const mode = getSceneMode();
+  if (mode !== 'corridor' && mode !== 'lobby') {
+    return;
+  }
+  stairsMenuOptions = buildStairsMenuOptions();
+  stairsMenuIndex = Math.max(0, stairsMenuOptions.findIndex(x => x.areaId === sceneState.areaId));
+  isStairsMenuOpen = true;
+  isChatPanelOpen = false;
+  closeSystemMessagesPanel();
+  closeFriendPanel();
+  closeTeleportMenu();
+  stopMovement();
+}
+
+function closeStairsMenu() {
+  isStairsMenuOpen = false;
+}
+
+function send(type, payload) {
+  if (!ws || ws.readyState !== 1) {
+    return;
+  }
+  ws.send(JSON.stringify({ type, payload }));
+}
+
+function loadImage(src) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
+}
+
+function loadAudio(src) {
+  return new Promise(resolve => {
+    const audio = new Audio(src);
+    audio.preload = 'auto';
+    const done = () => resolve(audio);
+    audio.addEventListener('canplaythrough', done, { once: true });
+    audio.addEventListener('error', () => resolve(null), { once: true });
+    audio.load();
+    setTimeout(() => resolve(audio), 1200);
+  });
+}
+
+async function loadTextures() {
+  const [floor, wallpaperLower, wallpaperMiddle, wallpaperUpper, door, playerImage, iconChat, iconMyRoomSettings, iconClaimRoom, iconClaimRoomTypo, iconFriends, iconSystemMessage, iconSystemMessageNew, iconTeleport] = await Promise.all([
+    loadImage('/textures/floor.png'),
+    loadImage('/textures/wallpaper_lower.png'),
+    loadImage('/textures/wallpaper_middle.png'),
+    loadImage('/textures/wallpaper_upper.png'),
+    loadImage('/textures/door32x64.png'),
+    loadImage('/textures/player.png'),
+    loadImage('/textures/icon_chat.png'),
+    loadImage('/textures/icon_my_room_settings.png'),
+    loadImage('/textures/icon_claim_room.png'),
+    loadImage('/textures/icon_cliam_room.png'),
+    loadImage('/textures/Icon_friends.png'),
+    loadImage('/textures/icon_sys_msg.png'),
+    loadImage('/textures/icon_sys_msg_new_msg.png'),
+    loadImage('/textures/icon_teleport.png')
+  ]);
+  // load agent sprite
+  const agentRobot = await loadImage('/textures/agent_robot.webp');
+
+  textures = {
+    floor,
+    wallpaperLower,
+    wallpaperMiddle,
+    wallpaperUpper,
+    door,
+    playerImage,
+    iconChat,
+    iconMyRoomSettings,
+    iconClaimRoom: iconClaimRoom || iconClaimRoomTypo,
+    iconFriends,
+    iconSystemMessage,
+    iconSystemMessageNew,
+    iconTeleport
+  };
+  textures.agentRobot = agentRobot;
+  // container for dynamically loaded item icons
+  textures.itemIcons = Object.create(null);
+}
+
+async function loadSounds() {
+  const doorOpen = await loadAudio('/sound/door_open.mp3');
+  sounds = { doorOpen };
+}
+
+function playSound(soundName) {
+  const sound = sounds[soundName];
+  if (!sound) {
+    return;
+  }
+  sound.currentTime = 0;
+  sound.play().catch(() => {});
+}
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function getDoorX(doorplate) {
+  return DOOR_START_X + (doorplate - 1) * DOOR_SPACING;
+}
+
+function getCommunitySpaceRoomId() {
+  return layout?.communitySpaceRoomId || COMMUNITY_SPACE_ROOM_ID;
+}
+
+function getCommunitySpaceX() {
+  return getDoorX(layout.residentCapacity) + (Number(layout.communitySpaceOffsetX) || COMMUNITY_SPACE_OFFSET_X);
+}
+
+function getSceneMode(targetState = sceneState) {
+  if (!targetState) {
+    return 'none';
+  }
+  if (targetState.areaType === 'lobby') {
+    return 'lobby';
+  }
+  if (targetState.areaType === 'floor' && targetState.roomId === 'corridor') {
+    return 'corridor';
+  }
+  if (targetState.areaType === 'floor' && /^room-\d+$/.test(targetState.roomId || '')) {
+    return 'room';
+  }
+  if (targetState.areaType === 'floor' && targetState.roomId === roomIdFromLayout()) {
+    return 'room';
+  }
+  return 'none';
+}
+
+function getRoomGeometry() {
+  const width = ROOM_WIDTH_TILES * TILE_SIZE;
+  const height = ROOM_HEIGHT_TILES * TILE_SIZE;
+  const left = Math.round((gameCanvas.width - width) / 2);
+  const top = ROOM_TOP_Y;
+  const floorY = top + (ROOM_HEIGHT_TILES - 1) * TILE_SIZE;
+  return { width, height, left, top, floorY };
+}
+
+function getInteractables(mode = getSceneMode()) {
+  if (!sceneState || !layout) {
+    return [];
+  }
+
+  if (mode === 'corridor') {
+    const owners = new Map((sceneState.floorDirectory || []).map(x => [x.doorplate, x.ownerName]));
+    const interactables = [];
+    for (let doorplate = 1; doorplate <= layout.residentCapacity; doorplate += 1) {
+      interactables.push({
+        type: 'room',
+        x: getDoorX(doorplate),
+        roomId: `room-${doorplate}`,
+        doorplate,
+        ownerName: owners.get(doorplate) || 'Empty'
+      });
+    }
+
+    const stairsOffset = Number(layout.stairsOffsetX) || STAIRS_OFFSET_X;
+    const communityOffset = Number(layout.communitySpaceOffsetX) || COMMUNITY_SPACE_OFFSET_X;
+    const stairsX = getDoorX(layout.residentCapacity) + stairsOffset;
+    const communityRoomId = layout.communitySpaceRoomId || COMMUNITY_SPACE_ROOM_ID;
+
+    interactables.push({
+      type: 'stairs',
+      x: stairsX,
+      roomId: null,
+      doorplate: null,
+      ownerName: STAIRS_LABEL
+    });
+
+    interactables.push({
+      type: 'community',
+      x: getDoorX(layout.residentCapacity) + communityOffset,
+      roomId: communityRoomId,
+      doorplate: null,
+      ownerName: COMMUNITY_SPACE_LABEL
+    });
+
+    // place an agent near the community space
+    // NPC agent removed from floor corridors; agent is only shown in lobby-1
+
+    return interactables;
+  }
+
+  if (mode === 'lobby') {
+    const items = [{ type: 'stairs', x: Math.round(gameCanvas.width / 2), ownerName: STAIRS_LABEL }];
+    // place NPC agent in lobby-1 (visual only, no room)
+    try {
+      if (sceneState?.areaId === 'lobby-1') {
+        items.unshift({ type: 'agent', x: Math.round(gameCanvas.width / 2) - 40, roomId: null, doorplate: null, agentId: 'liu-kanshan', ownerName: '刘看山' });
+      }
+    } catch (_e) {}
+    return items;
+  }
+
+  if (mode === 'room') {
+    const room = getRoomGeometry();
+    return [{ type: 'exit', x: room.left + 54, ownerName: EXIT_LABEL, roomId: 'corridor' }];
+  }
+
+  return [];
+}
+
+function getNearestInteractable(interactables) {
+  let nearest = null;
+  let minDistance = Number.POSITIVE_INFINITY;
+
+  for (const item of interactables) {
+    const distance = Math.abs(player.x - item.x);
+    if (distance < minDistance) {
+      minDistance = distance;
+      nearest = item;
+    }
+  }
+
+  if (minDistance > INTERACT_DISTANCE) {
+    return null;
+  }
+  return nearest;
+}
+
+function describeInteractable(item) {
+  if (!item) {
+    return `Move with A/D or \u2190/\u2192, jump with W/\u2191/Space, chat with ${CHAT_OPEN_KEY}. Press E near a door or staircase, ${CLEAR_HISTORY_KEY} to clear history.`;
+  }
+  if (item.type === 'stairs') {
+    return `Press E: Enter ${STAIRS_LABEL}. Press ${CHAT_OPEN_KEY} to chat, ${CLEAR_HISTORY_KEY} to clear history.`;
+  }
+  if (item.type === 'community') {
+    return `Press E: Enter ${COMMUNITY_SPACE_LABEL}. Press ${CHAT_OPEN_KEY} to chat, ${CLEAR_HISTORY_KEY} to clear history.`;
+  }
+  if (item.type === 'agent') {
+    return `Press E: Chat with ${item.ownerName}. Press ${CHAT_OPEN_KEY} to chat, ${CLEAR_HISTORY_KEY} to clear history.`;
+  }
+  if (item.type === 'exit') {
+    return `Press E: Use ${EXIT_LABEL} to return corridor`;
+  }
+  return `Press E: Enter room ${item.doorplate} (${item.ownerName}). Press ${CLAIM_KEY} to claim/move, ${CLEAR_HISTORY_KEY} to clear history.`;
+}
+
+function handleClaimNearestRoom() {
+  if (!sceneState || getSceneMode() !== 'corridor') {
+    return;
+  }
+  const nearest = getNearestInteractable(getInteractables('corridor'));
+  if (!nearest || nearest.type !== 'room') {
+    return;
+  }
+  send('claim-room', { doorplate: Number(nearest.doorplate) });
+}
+
+function sendFriendRequestByName(name) {
+  const targetName = String(name || '').trim();
+  if (!targetName) {
+    return;
+  }
+  send('friend-request', { targetName });
+}
+
+function sendFriendBlockToggleByName(name) {
+  const friendName = String(name || '').trim();
+  if (!friendName) {
+    return;
+  }
+  send('friend-block-toggle', { friendName });
+}
+
+function handleSelectedSystemMessageAction(action) {
+  const messages = normalizeSystemMessages(systemMessagesData).slice().reverse();
+  const selected = messages[systemMessageIndex] || null;
+  if (!selected || selected.type !== 'friend-request' || selected.meta?.status !== 'pending') {
+    return;
+  }
+  send('friend-request-action', {
+    messageId: selected.id,
+    action
+  });
+}
+
+function teleportToSelectedOption() {
+  const selected = teleportOptions[teleportIndex] || null;
+  if (!selected || selected.disabled) {
+    return;
+  }
+  if (selected.kind === 'floor') {
+    send('teleport', { kind: 'floor', floor: selected.floor });
+    return;
+  }
+  if (selected.kind === 'friend') {
+    send('teleport', { kind: 'friend', friendName: selected.friendName });
+  }
+}
+
+function resizeCanvas() {
+  gameCanvas.width = Math.max(960, window.innerWidth);
+  gameCanvas.height = Math.max(320, window.innerHeight);
+}
+
+function handleInteract() {
+  if (!sceneState || !layout) {
+    return;
+  }
+
+  const mode = getSceneMode();
+  const nearest = getNearestInteractable(getInteractables(mode));
+
+  if (mode === 'room') {
+    if (nearest?.type === 'exit') {
+      playSound('doorOpen');
+      send('enter-room', { roomId: 'corridor' });
+    }
+    return;
+  }
+
+  if (!nearest) {
+    return;
+  }
+
+  if (nearest.type === 'stairs') {
+    playSound('doorOpen');
+    openStairsMenu();
+    return;
+  }
+
+  if (nearest.type === 'agent') {
+    // open agent chat
+    currentAgentId = nearest.agentId || 'liu-kanshan';
+    currentAgentName = nearest.ownerName || 'Agent';
+    isAgentChat = true;
+    isChatPanelOpen = true;
+    chatPanelScrollOffset = 0;
+    stopMovement();
+    // request agent history from server
+    send('open-agent', { agentId: currentAgentId });
+    return;
+  }
+
+  if (nearest.type === 'room' || nearest.type === 'community') {
+    playSound('doorOpen');
+    send('enter-room', { roomId: nearest.roomId });
+    return;
+  }
+}
+
+function drawSprite(image, x, y, width, height, fallback) {
+  if (image) {
+    sceneCtx.drawImage(image, x, y, width, height);
+    return;
+  }
+  sceneCtx.fillStyle = fallback;
+  sceneCtx.fillRect(x, y, width, height);
+}
+
+function drawWrappedText(text, x, y, maxWidth, lineHeight) {
+  const words = String(text).split(/\s+/);
+  let line = '';
+  let curY = y;
+  for (let n = 0; n < words.length; n++) {
+    const testLine = line ? `${line} ${words[n]}` : words[n];
+    const metrics = sceneCtx.measureText(testLine);
+    const testWidth = metrics.width;
+    if (testWidth > maxWidth && line) {
+      sceneCtx.fillText(line, x, curY);
+      line = words[n];
+      curY += lineHeight;
+    } else {
+      line = testLine;
+    }
+  }
+  if (line) {
+    sceneCtx.fillText(line, x, curY);
+  }
+}
+
+function drawDoorLabel(text, x, y) {
+  sceneCtx.font = '12px "Microsoft YaHei", "PingFang SC", sans-serif';
+  const paddingX = 6;
+  const width = sceneCtx.measureText(text).width + paddingX * 2;
+  const left = Math.round(x - width / 2);
+  sceneCtx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+  sceneCtx.fillRect(left, y - 14, width, 16);
+  sceneCtx.fillStyle = '#fff';
+  sceneCtx.fillText(text, left + paddingX, y - 2);
+}
+
+function drawPlayerName(text, x, y) {
+  sceneCtx.font = '12px "Microsoft YaHei", "PingFang SC", sans-serif';
+  const paddingX = 6;
+  const width = sceneCtx.measureText(text).width + paddingX * 2;
+  const left = Math.round(x - width / 2);
+  sceneCtx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+  sceneCtx.fillRect(left, y - 14, width, 16);
+  sceneCtx.fillStyle = '#9be6ff';
+  sceneCtx.fillText(text, left + paddingX, y - 2);
+}
+
+function drawOverlayPanel(x, y, w, h) {
+  sceneCtx.fillStyle = 'rgba(8, 12, 18, 0.9)';
+  sceneCtx.fillRect(x, y, w, h);
+  sceneCtx.strokeStyle = '#6fa8dc';
+  sceneCtx.lineWidth = 2;
+  sceneCtx.strokeRect(x, y, w, h);
+}
+
+function pushCanvasNotice(text, isError = false) {
+  if (!text) {
+    return;
+  }
+  canvasNotices.push({
+    text: String(text),
+    isError,
+    expiresAt: Date.now() + NOTICE_DURATION_MS
+  });
+  if (canvasNotices.length > 6) {
+    canvasNotices.shift();
+  }
+}
+
+function renderCanvasNotices() {
+  const now = Date.now();
+  while (canvasNotices.length && canvasNotices[0].expiresAt <= now) {
+    canvasNotices.shift();
+  }
+  if (!canvasNotices.length) {
+    return;
+  }
+
+  sceneCtx.font = '14px "Microsoft YaHei", "PingFang SC", sans-serif';
+  // Support multi-line notices and avoid overlapping by computing each
+  // notice height based on wrapped lines.
+  const maxWidth = Math.min(440, gameCanvas.width - 24);
+  const LINE_HEIGHT = 18;
+  let curTop = 16;
+  for (let i = 0; i < canvasNotices.length; i += 1) {
+    const notice = canvasNotices[i];
+    const paddingH = 20;
+    const paddingV = 8;
+    const lines = wrapTextToLines(notice.text, maxWidth - paddingH);
+    const textWidth = lines.reduce((acc, l) => Math.max(acc, sceneCtx.measureText(l).width), 0);
+    const width = Math.min(maxWidth, Math.max(textWidth + paddingH, 80));
+    const left = Math.round((gameCanvas.width - width) / 2);
+    const height = lines.length * LINE_HEIGHT + paddingV * 2;
+
+    sceneCtx.fillStyle = notice.isError ? 'rgba(183, 28, 28, 0.86)' : 'rgba(19, 38, 57, 0.88)';
+    sceneCtx.fillRect(left, curTop, width, height);
+    sceneCtx.fillStyle = notice.isError ? '#ffebee' : '#c8f2ff';
+    for (let li = 0; li < lines.length; li += 1) {
+      sceneCtx.fillText(lines[li], left + 10, curTop + paddingV + (li + 1) * LINE_HEIGHT - 4);
+    }
+
+    curTop += height + 6;
+  }
+}
+
+function getSelectedRoomSettingsUser() {
+  if (!areaUserDirectory.length) {
+    return null;
+  }
+  roomSettingsUserIndex = clamp(roomSettingsUserIndex, 0, areaUserDirectory.length - 1);
+  return areaUserDirectory[roomSettingsUserIndex] || null;
+}
+
+function toggleRoomSettingsList(listKey, userName) {
+  const targetName = String(userName || '').trim();
+  if (!targetName || !myRoomSettings) {
+    return;
+  }
+
+  const target = myRoomSettings[listKey];
+  if (!Array.isArray(target)) {
+    return;
+  }
+
+  const otherKey = listKey === 'whitelist' ? 'blacklist' : 'whitelist';
+  const other = Array.isArray(myRoomSettings[otherKey]) ? myRoomSettings[otherKey] : [];
+  myRoomSettings[otherKey] = other.filter(name => name !== targetName);
+
+  if (target.includes(targetName)) {
+    myRoomSettings[listKey] = target.filter(name => name !== targetName);
+  } else {
+    myRoomSettings[listKey] = [...target, targetName];
+  }
+  isRoomSettingsDirty = true;
+}
+
+function removeRoomSettingsUser(userName) {
+  const targetName = String(userName || '').trim();
+  if (!targetName || !myRoomSettings) {
+    return;
+  }
+  myRoomSettings.whitelist = (myRoomSettings.whitelist || []).filter(name => name !== targetName);
+  myRoomSettings.blacklist = (myRoomSettings.blacklist || []).filter(name => name !== targetName);
+  isRoomSettingsDirty = true;
+}
+
+function saveRoomSettings() {
+  send('my-room-settings', {
+    defaultAccess: myRoomSettings.defaultAccess === 'deny' ? 'deny' : 'allow',
+    whitelist: myRoomSettings.whitelist || [],
+    blacklist: myRoomSettings.blacklist || []
+  });
+  isRoomSettingsDirty = false;
+}
+
+function openRoomSettings() {
+  if (!isJoined || !sceneState?.ownedRoom) {
+    return;
+  }
+  isRoomSettingsOpen = true;
+  isChatPanelOpen = false;
+  closeSystemMessagesPanel();
+  closeFriendPanel();
+  closeTeleportMenu();
+  closeStairsMenu();
+  stopMovement();
+  isRoomSettingsDirty = false;
+  roomSettingsScrollOffset = 0;
+}
+
+function closeRoomSettings() {
+  isRoomSettingsOpen = false;
+}
+
+function closeSystemMessagesPanel() {
+  isSystemMessagesOpen = false;
+}
+
+function openSystemMessagesPanel() {
+  isSystemMessagesOpen = true;
+  isFriendPanelOpen = false;
+  isTeleportMenuOpen = false;
+  isChatPanelOpen = false;
+  closeStairsMenu();
+  closeRoomSettings();
+  stopMovement();
+  systemMessageScrollOffset = 0;
+}
+
+function closeFriendPanel() {
+  isFriendPanelOpen = false;
+}
+
+function openFriendPanel() {
+  isFriendPanelOpen = true;
+  isSystemMessagesOpen = false;
+  isTeleportMenuOpen = false;
+  isChatPanelOpen = false;
+  closeStairsMenu();
+  closeRoomSettings();
+  stopMovement();
+  const candidates = getFriendPanelCandidates();
+  friendPanelIndex = clamp(friendPanelIndex, 0, Math.max(0, candidates.length - 1));
+  friendPanelScrollOffset = 0;
+}
+
+function closeTeleportMenu() {
+  isTeleportMenuOpen = false;
+}
+
+function openTeleportMenu() {
+  teleportOptions = buildTeleportOptions();
+  teleportIndex = clamp(teleportIndex, 0, Math.max(0, teleportOptions.length - 1));
+  isTeleportMenuOpen = true;
+  isFriendPanelOpen = false;
+  isSystemMessagesOpen = false;
+  isChatPanelOpen = false;
+  closeStairsMenu();
+  closeRoomSettings();
+  stopMovement();
+  teleportScrollOffset = 0;
+}
+
+function getUiButtons() {
+  if (!isJoined) {
+    return [];
+  }
+  const buttons = [];
+  let x = 14;
+  const y = 12;
+  const mode = getSceneMode();
+  const hasPendingSystemMessage = unreadSystemMessageCount > 0;
+  buttons.push({ key: 'sysmsg', x, y, w: UI_BUTTON_SIZE, h: UI_BUTTON_SIZE, icon: hasPendingSystemMessage ? textures.iconSystemMessageNew : textures.iconSystemMessage, label: 'Sys' });
+  x += UI_BUTTON_SIZE + UI_BUTTON_GAP;
+  buttons.push({ key: 'friends', x, y, w: UI_BUTTON_SIZE, h: UI_BUTTON_SIZE, icon: textures.iconFriends, label: 'Friends' });
+  x += UI_BUTTON_SIZE + UI_BUTTON_GAP;
+  buttons.push({ key: 'teleport', x, y, w: UI_BUTTON_SIZE, h: UI_BUTTON_SIZE, icon: textures.iconTeleport, label: 'TP' });
+  x += UI_BUTTON_SIZE + UI_BUTTON_GAP;
+  buttons.push({ key: 'chat', x, y, w: UI_BUTTON_SIZE, h: UI_BUTTON_SIZE, icon: textures.iconChat, label: 'Chat' });
+  x += UI_BUTTON_SIZE + UI_BUTTON_GAP;
+  buttons.push({ key: 'claim', x, y, w: UI_BUTTON_SIZE, h: UI_BUTTON_SIZE, icon: textures.iconClaimRoom, label: 'Claim', disabled: mode !== 'corridor' });
+  x += UI_BUTTON_SIZE + UI_BUTTON_GAP;
+  buttons.push({ key: 'settings', x, y, w: UI_BUTTON_SIZE, h: UI_BUTTON_SIZE, icon: textures.iconMyRoomSettings, label: 'Room', disabled: !sceneState?.ownedRoom });
+  return buttons;
+}
+
+function drawIconButton(button) {
+  sceneCtx.fillStyle = button.disabled ? 'rgba(30, 30, 30, 0.65)' : 'rgba(12, 22, 35, 0.86)';
+  sceneCtx.fillRect(button.x, button.y, button.w, button.h);
+  sceneCtx.strokeStyle = button.disabled ? '#555' : '#6fa8dc';
+  sceneCtx.lineWidth = 2;
+  sceneCtx.strokeRect(button.x, button.y, button.w, button.h);
+
+  if (button.icon) {
+    sceneCtx.globalAlpha = button.disabled ? 0.35 : 1;
+    sceneCtx.drawImage(button.icon, button.x + 6, button.y + 6, button.w - 12, button.h - 12);
+    sceneCtx.globalAlpha = 1;
+  } else {
+    sceneCtx.fillStyle = button.disabled ? '#888' : '#fff';
+    sceneCtx.font = '11px "Microsoft YaHei", "PingFang SC", sans-serif';
+    sceneCtx.fillText(button.label, button.x + 5, button.y + 22);
+  }
+}
+
+function renderUiButtons() {
+  uiButtons = getUiButtons();
+  uiButtons.forEach(drawIconButton);
+}
+
+function renderInventoryHUD() {
+  if (!isJoined) return;
+  const right = gameCanvas.width - 14;
+  const top = 12;
+  const width = 220;
+  const height = INVENTORY_VISIBLE_ROWS * 22 + 16;
+  const left = right - width;
+  drawOverlayPanel(left, top, width, height);
+  sceneCtx.fillStyle = '#fff';
+  sceneCtx.font = '14px "Microsoft YaHei", "PingFang SC", sans-serif';
+  sceneCtx.fillText('Inventory', left + 12, top + 20);
+
+  const visible = INVENTORY_VISIBLE_ROWS;
+  inventoryIndex = clamp(inventoryIndex, 0, Math.max(0, inventoryList.length - 1));
+  inventoryScrollOffset = ensureIndexVisible(inventoryIndex, visible, inventoryList.length, inventoryScrollOffset);
+  const start = inventoryScrollOffset;
+  const end = Math.min(inventoryList.length, start + visible);
+
+  for (let i = start; i < end; i += 1) {
+    const item = inventoryList[i];
+    const y = top + 40 + (i - start) * 22;
+    const isSelected = i === inventoryIndex;
+    if (isSelected) {
+      sceneCtx.fillStyle = 'rgba(111, 168, 220, 0.35)';
+      sceneCtx.fillRect(left + 10, y - 14, width - 20, 20);
+    }
+    // try to draw item icon (lazy load if needed)
+    const icon = textures.itemIcons[item.id];
+    let textX = left + 14;
+    if (icon === undefined) {
+      // start async load but don't block rendering
+      (async id => {
+        try {
+          const img = await loadImage(`/textures/${id}.png`);
+          if (img) {
+            textures.itemIcons[id] = img;
+            return;
+          }
+          const img2 = await loadImage(`/textures/item-${id}.png`);
+          textures.itemIcons[id] = img2 || null;
+        } catch (_e) {
+          textures.itemIcons[id] = null;
+        }
+      })(item.id);
+    }
+    if (icon) {
+      // draw icon then shift text to the right
+      sceneCtx.drawImage(icon, left + 12, y - 12, 16, 16);
+      textX = left + 34;
+    }
+    sceneCtx.fillStyle = isSelected ? '#fff' : '#cfd8dc';
+    const label = `${item.name || item.id} x${item.qty}`;
+    sceneCtx.fillText(`${isSelected ? '> ' : '  '}${label}`, textX, y);
+  }
+}
+
+function renderRoomSettingsPanel() {
+  if (!isRoomSettingsOpen) {
+    return;
+  }
+
+  const width = 560;
+  const height = 280;
+  const left = Math.round((gameCanvas.width - width) / 2);
+  const top = Math.round((gameCanvas.height - height) / 2);
+  drawOverlayPanel(left, top, width, height);
+
+  sceneCtx.fillStyle = '#fff';
+  sceneCtx.font = '16px "Microsoft YaHei", "PingFang SC", sans-serif';
+  sceneCtx.fillText('my-room_settings', left + 16, top + 28);
+
+  sceneCtx.font = '14px "Microsoft YaHei", "PingFang SC", sans-serif';
+  const defaultAccessText = myRoomSettings.defaultAccess === 'deny' ? '默认拒绝' : '默认允许';
+  sceneCtx.fillStyle = '#9be6ff';
+  sceneCtx.fillText(`默认权限: ${defaultAccessText} (Tab 切换)`, left + 16, top + 56);
+
+  sceneCtx.fillStyle = '#cfd8dc';
+  sceneCtx.fillText('↑/↓ 选玩家  A 白名单  D 黑名单  X 移除  Enter 保存  Esc 关闭', left + 16, top + height - 18);
+
+  const selectedUser = getSelectedRoomSettingsUser();
+  if (!areaUserDirectory.length) {
+    sceneCtx.fillStyle = '#b0bec5';
+    sceneCtx.fillText('当前区域没有其他玩家可设置。', left + 16, top + 94);
+    return;
+  }
+
+  for (let i = 0; i < areaUserDirectory.length && i < 7; i += 1) {
+    const user = areaUserDirectory[i];
+    const y = top + 92 + i * 24;
+    const isSelected = selectedUser && selectedUser.id === user.id;
+    if (isSelected) {
+      sceneCtx.fillStyle = 'rgba(111, 168, 220, 0.35)';
+      sceneCtx.fillRect(left + 14, y - 15, width - 28, 20);
+    }
+
+    let status = '默认';
+    if ((myRoomSettings.whitelist || []).includes(user.name)) {
+      status = '白名单';
+    } else if ((myRoomSettings.blacklist || []).includes(user.name)) {
+      status = '黑名单';
+    }
+
+    sceneCtx.fillStyle = isSelected ? '#fff' : '#cfd8dc';
+    sceneCtx.fillText(`${isSelected ? '> ' : '  '}${user.name}  ${status}`, left + 20, y);
+  }
+}
+
+function handleUiButtonClick(key) {
+  if (key === 'sysmsg') {
+    if (isSystemMessagesOpen) {
+      closeSystemMessagesPanel();
+    } else {
+      openSystemMessagesPanel();
+    }
+    return;
+  }
+  if (key === 'friends') {
+    if (isFriendPanelOpen) {
+      closeFriendPanel();
+    } else {
+      openFriendPanel();
+    }
+    return;
+  }
+  if (key === 'teleport') {
+    if (isTeleportMenuOpen) {
+      closeTeleportMenu();
+    } else {
+      openTeleportMenu();
+    }
+    return;
+  }
+  if (key === 'chat') {
+    isChatPanelOpen = !isChatPanelOpen;
+    if (!isChatPanelOpen) {
+      // leaving any agent chat context
+      isAgentChat = false;
+      currentAgentId = null;
+      currentAgentName = null;
+    }
+    if (isChatPanelOpen) {
+      chatPanelScrollOffset = 0;
+      closeStairsMenu();
+      closeRoomSettings();
+      closeSystemMessagesPanel();
+      closeFriendPanel();
+      closeTeleportMenu();
+      stopMovement();
+    }
+    updateChatImeInput();
+    return;
+  }
+  if (key === 'claim') {
+    handleClaimNearestRoom();
+    return;
+  }
+  if (key === 'settings') {
+    if (isRoomSettingsOpen) {
+      closeRoomSettings();
+    } else {
+      openRoomSettings();
+    }
+  }
+}
+
+function renderStairsMenu() {
+  if (!isStairsMenuOpen) {
+    return;
+  }
+  const width = 420;
+  const height = 220;
+  const left = Math.round((gameCanvas.width - width) / 2);
+  const top = Math.round((gameCanvas.height - height) / 2);
+
+  drawOverlayPanel(left, top, width, height);
+  sceneCtx.fillStyle = '#fff';
+  sceneCtx.font = '16px "Microsoft YaHei", "PingFang SC", sans-serif';
+  sceneCtx.fillText('\u697c\u68af\u76ee\u7684\u5730\u9009\u62e9', left + 16, top + 30);
+
+  sceneCtx.font = '14px "Microsoft YaHei", "PingFang SC", sans-serif';
+  for (let i = 0; i < stairsMenuOptions.length; i += 1) {
+    const itemTop = top + 52 + i * 24;
+    const selected = i === stairsMenuIndex;
+    if (selected) {
+      sceneCtx.fillStyle = 'rgba(111, 168, 220, 0.35)';
+      sceneCtx.fillRect(left + 14, itemTop - 14, width - 28, 20);
+    }
+    sceneCtx.fillStyle = selected ? '#fff' : '#cfd8dc';
+    const prefix = selected ? '> ' : '  ';
+    sceneCtx.fillText(`${prefix}${stairsMenuOptions[i].label}`, left + 20, itemTop);
+  }
+
+  sceneCtx.fillStyle = '#9be6ff';
+  sceneCtx.fillText('\u2191/\u2193\u9009\u62e9  Enter\u786e\u8ba4  Esc\u53d6\u6d88', left + 16, top + height - 16);
+}
+
+function renderChatPanel() {
+  if (!isJoined) {
+    return;
+  }
+  if (isStairsMenuOpen || isRoomSettingsOpen || isSystemMessagesOpen || isFriendPanelOpen || isTeleportMenuOpen) {
+    return;
+  }
+  const width = 560;
+  const height = 240;
+  const left = Math.round((gameCanvas.width - width) / 2);
+  const top = gameCanvas.height - height - 14;
+
+  drawOverlayPanel(left, top, width, height);
+  sceneCtx.fillStyle = '#fff';
+  sceneCtx.font = '16px "Microsoft YaHei", "PingFang SC", sans-serif';
+  const chatTitle = isChatPanelOpen
+    ? '\u804a\u5929 (\u8f93\u5165\u4e2d: Enter \u53d1\u9001, Esc \u9000\u51fa)'
+    : '\u804a\u5929 (\u6309 T \u5f00\u59cb\u8f93\u5165)';
+  sceneCtx.fillText(chatTitle, left + 14, top + 26);
+
+  const visibleRows = 8;
+  const maxChatOffset = Math.max(0, chatLog.length - visibleRows);
+  chatPanelScrollOffset = clamp(chatPanelScrollOffset, 0, maxChatOffset);
+  const start = Math.max(0, chatLog.length - visibleRows - chatPanelScrollOffset);
+  const visible = chatLog.slice(start, start + visibleRows);
+  sceneCtx.font = '13px "Microsoft YaHei", "PingFang SC", sans-serif';
+  visible.forEach((line, idx) => {
+    sceneCtx.fillStyle = line.isSystem ? '#b0bec5' : '#e3f2fd';
+    const startY = top + 52 + idx * 20;
+    // wrap text within chat panel width
+    sceneCtx.font = '13px "Microsoft YaHei", "PingFang SC", sans-serif';
+    drawWrappedText(`${line.sender}: ${line.text}`, left + 14, startY, width - 28, 18);
+  });
+
+  sceneCtx.fillStyle = '#263238';
+  sceneCtx.fillRect(left + 12, top + height - 44, width - 24, 28);
+  sceneCtx.strokeStyle = '#6fa8dc';
+  sceneCtx.strokeRect(left + 12, top + height - 44, width - 24, 28);
+  sceneCtx.fillStyle = '#fff';
+  const prompt = isChatPanelOpen ? `> ${chatInputText}` : '> (Press T to type...)';
+  sceneCtx.fillText(prompt, left + 18, top + height - 24);
+}
+
+function renderLoginCanvas() {
+  const width = 620;
+  const height = 360;
+  const left = Math.round((gameCanvas.width - width) / 2);
+  const top = Math.round((gameCanvas.height - height) / 2);
+
+  drawOverlayPanel(left, top, width, height);
+  sceneCtx.fillStyle = '#fff';
+  sceneCtx.font = '24px "Microsoft YaHei", "PingFang SC", sans-serif';
+  sceneCtx.fillText('Floor Chat System', left + 18, top + 38);
+
+  const fields = getJoinFields();
+  sceneCtx.font = '15px "Microsoft YaHei", "PingFang SC", sans-serif';
+  let row = 0;
+  for (let i = 0; i < fields.length; i += 1) {
+    const field = fields[i];
+    const y = top + 78 + row * 40;
+    row += 1;
+    const focused = i === joinUi.focusIndex;
+    if (focused) {
+      sceneCtx.fillStyle = 'rgba(111, 168, 220, 0.35)';
+      sceneCtx.fillRect(left + 14, y - 20, width - 28, 28);
+    }
+
+    let valueText = '';
+    if (field.key === 'name') {
+      valueText = joinUi.name || '(type your name)';
+    } else if (field.key === 'role') {
+      valueText = joinUi.role;
+    } else if (field.key === 'homeFloor') {
+      valueText = String(joinUi.homeFloor);
+    } else if (field.key === 'doorplate') {
+      valueText = String(joinUi.doorplate);
+    } else if (field.key === 'areaId') {
+      valueText = areaName(joinUi.areaId || '-');
+    } else if (field.key === 'restoreHistory') {
+      valueText = joinUi.restoreHistory ? 'ON' : 'OFF';
+    } else if (field.key === 'join') {
+      valueText = '[ Press Enter to Join ]';
+    }
+
+    sceneCtx.fillStyle = focused ? '#fff' : '#cfd8dc';
+    const prefix = focused ? '> ' : '  ';
+    sceneCtx.fillText(`${prefix}${field.label}: ${valueText}`, left + 20, y);
+  }
+
+  sceneCtx.fillStyle = '#9be6ff';
+  sceneCtx.font = '13px "Microsoft YaHei", "PingFang SC", sans-serif';
+  sceneCtx.fillText('↑/↓ choose field  ←/→ change option  Enter confirm/join  Backspace delete', left + 18, top + height - 34);
+  sceneCtx.fillText('Name field supports Chinese IME input in the box below.', left + 18, top + height - 14);
+}
+
+function getOtherPlayers(mode = getSceneMode()) {
+  if (!sceneState?.roomUsers?.length) {
+    return [];
+  }
+
+  const others = sceneState.roomUsers.filter(u => u.id !== currentUserId);
+  if (!others.length) {
+    return [];
+  }
+  const groundY = mode === 'room' ? getRoomGeometry().floorY : FLOOR_Y;
+  const interactables = getInteractables(mode);
+  const fallbackMinX = interactables.length ? (mode === 'lobby' ? interactables[0].x - 150 : interactables[0].x - 40) : 40;
+  const fallbackMaxX = interactables.length
+    ? (mode === 'lobby' ? interactables[0].x + 150 : interactables[interactables.length - 1].x + 40)
+    : gameCanvas.width - 40;
+
+  return others.map((u, i) => {
+    const fallbackX = clamp(fallbackMinX + 50 + i * 56, fallbackMinX + 24, fallbackMaxX - 24);
+    return {
+      id: u.id,
+      name: u.name,
+      x: Number.isFinite(u.posX) ? u.posX : fallbackX,
+      y: Number.isFinite(u.posY) ? Math.min(u.posY, groundY) : groundY
+    };
+  });
+}
+
+function renderScene() {
+  sceneCtx.fillStyle = '#000';
+  sceneCtx.fillRect(0, 0, gameCanvas.width, gameCanvas.height);
+
+  if (!isJoined) {
+    updateJoinImeInput();
+    updateChatImeInput();
+    renderLoginCanvas();
+    return;
+  }
+
+  updateJoinImeInput();
+  updateChatImeInput();
+
+  const mode = getSceneMode();
+  if (mode === 'none') {
+    sceneHint.textContent = 'Move with A/D or \u2190/\u2192, jump with W/\u2191/Space. Press E to interact, T to chat.';
+    sceneCtx.fillStyle = '#fff';
+    sceneCtx.font = '16px "Microsoft YaHei", "PingFang SC", sans-serif';
+    sceneCtx.fillText('Graphical scene is loading...', 20, 32);
+    renderInventoryHUD();
+    renderUiButtons();
+    renderStairsMenu();
+    renderRoomSettingsPanel();
+    renderSystemMessagesPanel();
+    renderFriendPanel();
+    renderTeleportPanel();
+    renderChatPanel();
+    renderCanvasNotices();
+    return;
+  }
+
+  const interactables = getInteractables(mode);
+  const nearest = getNearestInteractable(interactables);
+  const otherPlayers = getOtherPlayers(mode);
+  sceneHint.textContent = describeInteractable(nearest);
+
+  if (mode === 'corridor' || mode === 'lobby') {
+    const worldMaxX = interactables[interactables.length - 1].x + 80;
+    const worldWidth = Math.max(gameCanvas.width, worldMaxX + 80);
+    const cameraX = clamp(player.x - gameCanvas.width / 2, 0, worldWidth - gameCanvas.width);
+    const tileStart = Math.floor((cameraX - TILE_SIZE) / TILE_SIZE);
+    const tileEnd = Math.ceil((cameraX + gameCanvas.width + TILE_SIZE) / TILE_SIZE);
+
+    for (let i = tileStart; i <= tileEnd; i += 1) {
+      const drawX = i * TILE_SIZE - cameraX;
+      drawSprite(textures.wallpaperUpper, drawX, FLOOR_Y - 96, TILE_SIZE, TILE_SIZE, '#111');
+      drawSprite(textures.wallpaperMiddle, drawX, FLOOR_Y - 64, TILE_SIZE, TILE_SIZE, '#1a1a1a');
+      drawSprite(textures.wallpaperMiddle, drawX, FLOOR_Y - 32, TILE_SIZE, TILE_SIZE, '#1a1a1a');
+      drawSprite(textures.wallpaperLower, drawX, FLOOR_Y, TILE_SIZE, TILE_SIZE, '#242424');
+      drawSprite(textures.floor, drawX, FLOOR_Y, TILE_SIZE, TILE_SIZE, '#464646');
+    }
+
+    for (const item of interactables) {
+      const drawX = item.x - cameraX - DOOR_WIDTH / 2;
+      if (item.type === 'agent') {
+        // draw agent sprite
+        const img = textures.agentRobot;
+        if (img) {
+          sceneCtx.drawImage(img, item.x - cameraX - 16, FLOOR_Y - 48, 32, 32);
+        } else {
+          sceneCtx.fillStyle = '#8d6e63';
+          sceneCtx.fillRect(item.x - cameraX - 12, FLOOR_Y - 24, 24, 24);
+        }
+        drawDoorLabel(item.ownerName || 'Agent', item.x - cameraX, FLOOR_Y - 42);
+        continue;
+      }
+
+      if (mode === 'lobby') {
+        // In lobby, draw door sprite for stairs to keep the staircase entrance visible
+        if (item.type === 'stairs') {
+          drawSprite(textures.door, drawX, FLOOR_Y - (DOOR_HEIGHT - TILE_SIZE), DOOR_WIDTH, DOOR_HEIGHT, '#6b4a2d');
+          drawDoorLabel(STAIRS_LABEL, item.x - cameraX, FLOOR_Y - 42);
+          continue;
+        }
+        // For other lobby items (community), draw label only
+        if (item.type === 'community') {
+          drawDoorLabel(COMMUNITY_SPACE_LABEL, item.x - cameraX, FLOOR_Y - 42);
+          continue;
+        }
+        // fallback: draw label
+        drawDoorLabel(`${item.doorplate}: ${item.ownerName}`, item.x - cameraX, FLOOR_Y - 42);
+        continue;
+      }
+
+      // default behavior for corridor/room: draw door sprite then labels
+      drawSprite(textures.door, drawX, FLOOR_Y - (DOOR_HEIGHT - TILE_SIZE), DOOR_WIDTH, DOOR_HEIGHT, '#6b4a2d');
+      if (item.type === 'stairs') {
+        drawDoorLabel(STAIRS_LABEL, item.x - cameraX, FLOOR_Y - 42);
+      } else if (item.type === 'community') {
+        drawDoorLabel(COMMUNITY_SPACE_LABEL, item.x - cameraX, FLOOR_Y - 42);
+      } else {
+        drawDoorLabel(`${item.doorplate}: ${item.ownerName}`, item.x - cameraX, FLOOR_Y - 42);
+      }
+    }
+
+    if (nearest) {
+      const drawX = nearest.x - cameraX - DOOR_WIDTH / 2;
+      if (nearest.type === 'agent') {
+        // For agent, don't draw yellow border; brighten area and redraw agent to appear highlighted
+        sceneCtx.fillStyle = 'rgba(255,255,255,0.12)';
+        sceneCtx.fillRect(drawX - 2, FLOOR_Y - (DOOR_HEIGHT - TILE_SIZE) - 2, DOOR_WIDTH + 4, DOOR_HEIGHT + 4);
+        // redraw agent sprite on top to make it appear brighter
+        try {
+          const img = textures.agentRobot;
+          const ax = nearest.x - cameraX - 16;
+          if (img) {
+            sceneCtx.drawImage(img, ax, FLOOR_Y - 48, 32, 32);
+          } else {
+            sceneCtx.fillStyle = '#9e7b6a';
+            sceneCtx.fillRect(ax + 4, FLOOR_Y - 24, 24, 24);
+          }
+        } catch (_e) {}
+      } else {
+        sceneCtx.strokeStyle = '#ffd54f';
+        sceneCtx.lineWidth = 2;
+        sceneCtx.strokeRect(drawX - 2, FLOOR_Y - (DOOR_HEIGHT - TILE_SIZE) - 2, DOOR_WIDTH + 4, DOOR_HEIGHT + 4);
+      }
+    }
+
+    for (const other of otherPlayers) {
+      drawSprite(textures.playerImage, other.x - cameraX - 16, other.y, 32, 32, '#6dc56d');
+      drawPlayerName(other.name, other.x - cameraX, other.y - 6);
+    }
+
+    // draw room furnishings if any (in corridor/lobby we skip)
+    for (const f of roomFurnishings || []) {
+      if (!f) continue;
+      const fx = (f.x || 0) - cameraX;
+      const fy = (f.y != null) ? f.y : FLOOR_Y - 12;
+      const icon = textures.itemIcons[f.id];
+      if (icon === undefined) {
+        (async id => {
+          try {
+            const img = await loadImage(`/textures/${id}.png`);
+            if (img) textures.itemIcons[id] = img;
+            else {
+              const img2 = await loadImage(`/textures/item-${id}.png`);
+              textures.itemIcons[id] = img2 || null;
+            }
+          } catch (_e) {
+            textures.itemIcons[id] = null;
+          }
+        })(f.id);
+      }
+      if (icon) {
+        sceneCtx.drawImage(icon, fx - 12, fy, 24, 24);
+      } else {
+        sceneCtx.fillStyle = '#8d6e63';
+        sceneCtx.fillRect(fx - 12, fy, 24, 24);
+      }
+    }
+
+    drawSprite(textures.playerImage, player.x - cameraX - 16, player.y, 32, 32, '#4ea7ff');
+    drawPlayerName('You', player.x - cameraX, player.y - 6);
+    renderInventoryHUD();
+    renderUiButtons();
+    renderStairsMenu();
+    renderRoomSettingsPanel();
+    renderSystemMessagesPanel();
+    renderFriendPanel();
+    renderTeleportPanel();
+    renderChatPanel();
+    renderCanvasNotices();
+    return;
+  }
+
+  if (mode === 'room') {
+    const room = getRoomGeometry();
+    for (let i = 0; i < ROOM_WIDTH_TILES; i += 1) {
+      const drawX = room.left + i * TILE_SIZE;
+      drawSprite(textures.wallpaperUpper, drawX, room.top, TILE_SIZE, TILE_SIZE, '#111');
+      drawSprite(textures.wallpaperMiddle, drawX, room.top + TILE_SIZE, TILE_SIZE, TILE_SIZE, '#1a1a1a');
+      drawSprite(textures.wallpaperMiddle, drawX, room.top + TILE_SIZE * 2, TILE_SIZE, TILE_SIZE, '#1a1a1a');
+      drawSprite(textures.wallpaperMiddle, drawX, room.top + TILE_SIZE * 3, TILE_SIZE, TILE_SIZE, '#1a1a1a');
+      drawSprite(textures.wallpaperLower, drawX, room.floorY, TILE_SIZE, TILE_SIZE, '#242424');
+      drawSprite(textures.floor, drawX, room.floorY, TILE_SIZE, TILE_SIZE, '#464646');
+    }
+
+    const exit = interactables[0];
+    const doorX = exit.x - DOOR_WIDTH / 2;
+    drawSprite(textures.door, doorX, room.floorY - (DOOR_HEIGHT - TILE_SIZE), DOOR_WIDTH, DOOR_HEIGHT, '#6b4a2d');
+    drawDoorLabel(EXIT_LABEL, exit.x, room.floorY - 42);
+
+    if (nearest?.type === 'exit') {
+      sceneCtx.strokeStyle = '#ffd54f';
+      sceneCtx.lineWidth = 2;
+      sceneCtx.strokeRect(doorX - 2, room.floorY - (DOOR_HEIGHT - TILE_SIZE) - 2, DOOR_WIDTH + 4, DOOR_HEIGHT + 4);
+    }
+
+    // draw room furnishings for this room
+    for (const f of roomFurnishings || []) {
+      if (!f) continue;
+      const fx = f.x || 0;
+      const fy = (f.y != null) ? f.y : room.floorY - 12;
+      const icon = textures.itemIcons[f.id];
+      if (icon === undefined) {
+        (async id => {
+          try {
+            const img = await loadImage(`/textures/${id}.png`);
+            if (img) textures.itemIcons[id] = img;
+            else {
+              const img2 = await loadImage(`/textures/item-${id}.png`);
+              textures.itemIcons[id] = img2 || null;
+            }
+          } catch (_e) {
+            textures.itemIcons[id] = null;
+          }
+        })(f.id);
+      }
+      if (icon) {
+        sceneCtx.drawImage(icon, fx - 12, fy, 24, 24);
+      } else {
+        sceneCtx.fillStyle = '#8d6e63';
+        sceneCtx.fillRect(fx - 12, fy, 24, 24);
+      }
+    }
+
+    for (const other of otherPlayers) {
+      drawSprite(textures.playerImage, other.x - 16, other.y, 32, 32, '#6dc56d');
+      drawPlayerName(other.name, other.x, other.y - 6);
+    }
+
+    drawSprite(textures.playerImage, player.x - 16, player.y, 32, 32, '#4ea7ff');
+    drawPlayerName('You', player.x, player.y - 6);
+    renderInventoryHUD();
+    renderUiButtons();
+    renderStairsMenu();
+    renderRoomSettingsPanel();
+    renderSystemMessagesPanel();
+    renderFriendPanel();
+    renderTeleportPanel();
+    renderChatPanel();
+    renderCanvasNotices();
+  }
+}
+
+function getGroundY(mode = getSceneMode()) {
+  if (mode === 'room') {
+    return getRoomGeometry().floorY;
+  }
+  return FLOOR_Y;
+}
+
+function syncState(state) {
+  const previousState = sceneState;
+  sceneState = state;
+  areaUserDirectory = Array.isArray(state.areaUsers) ? state.areaUsers : [];
+  friendList = Array.isArray(state.friends) ? state.friends : [];
+  blockedFriendList = Array.isArray(state.blockedFriends) ? state.blockedFriends : [];
+  systemMessagesData = normalizeSystemMessages(state.systemMessages);
+  unreadSystemMessageCount = Number.isInteger(state.unreadSystemMessageCount) ? state.unreadSystemMessageCount : 0;
+  onlineFriendLocations = Array.isArray(state.onlineFriends) ? state.onlineFriends : [];
+  if (!isRoomSettingsOpen || !isRoomSettingsDirty) {
+    myRoomSettings = {
+      defaultAccess: state.myRoomSettings?.defaultAccess === 'deny' ? 'deny' : 'allow',
+      whitelist: Array.isArray(state.myRoomSettings?.whitelist) ? state.myRoomSettings.whitelist : [],
+      blacklist: Array.isArray(state.myRoomSettings?.blacklist) ? state.myRoomSettings.blacklist : []
+    };
+  }
+  roomSettingsUserIndex = clamp(roomSettingsUserIndex, 0, Math.max(0, areaUserDirectory.length - 1));
+  roomSettingsScrollOffset = ensureIndexVisible(roomSettingsUserIndex, 7, areaUserDirectory.length, roomSettingsScrollOffset);
+  locationInfo.textContent = `Current area: ${areaName(state.areaId)} / ${roomName(state.roomId)}`;
+  scenePanel.classList.remove('hidden');
+
+  selfInfo.textContent = selfInfo.textContent.split(' | ')[0];
+  if (state.ownedRoom) {
+    const ownedLabel = `Owned room: Floor ${state.ownedRoom.floor}, ${roomName(state.ownedRoom.roomId)}`;
+    selfInfo.textContent = `${selfInfo.textContent.split(' | ')[0]} | ${ownedLabel}`;
+  }
+
+  const mode = getSceneMode(state);
+  const previousMode = getSceneMode(previousState);
+  const isSameLocation = previousState?.areaId === state.areaId && previousState?.roomId === state.roomId;
+  if (!isSameLocation) {
+    if (mode === 'corridor' && previousMode === 'room' && previousState?.areaId === state.areaId) {
+      const previousRoomMatch = /^room-(\d+)$/.exec(previousState.roomId || '');
+      if (previousRoomMatch) {
+        player.x = getDoorX(Number(previousRoomMatch[1]));
+      } else if ((previousState.roomId || '') === getCommunitySpaceRoomId()) {
+        player.x = getCommunitySpaceX();
+      }
+    } else if (mode === 'corridor') {
+      player.x = getDoorX(layout.residentCapacity) + (Number(layout.stairsOffsetX) || STAIRS_OFFSET_X);
+    } else if (mode === 'lobby') {
+      player.x = Math.round(gameCanvas.width / 2);
+    } else if (mode === 'room') {
+      const room = getRoomGeometry();
+      player.x = room.left + 110;
+    }
+
+    player.y = getGroundY(mode);
+    player.velocityX = 0;
+    player.velocityY = 0;
+    jumpBufferRemaining = 0;
+    lastSentX = null;
+    lastSentY = null;
+    closeStairsMenu();
+    closeRoomSettings();
+      closeSystemMessagesPanel();
+      closeFriendPanel();
+      closeTeleportMenu();
+    if (isChatPanelOpen) {
+      stopMovement();
+    }
+  }
+
+  usersList.innerHTML = '';
+  state.roomUsers.forEach(u => {
+    const li = document.createElement('li');
+    if (u.role === 'resident') {
+      li.textContent = `${u.name} (resident floor ${u.homeFloor}, doorplate ${u.doorplate})`;
+    } else {
+      li.textContent = `${u.name} (visitor)`;
+    }
+    usersList.appendChild(li);
+  });
+}
+
+function updatePlayerPosition(dt) {
+  if (!sceneState || !layout) {
+    return;
+  }
+
+  const mode = getSceneMode();
+  const interactables = getInteractables(mode);
+  if (!interactables.length) {
+    return;
+  }
+
+  let minX;
+  let maxX;
+  if (mode === 'room') {
+    const room = getRoomGeometry();
+    minX = room.left + 24;
+    maxX = room.left + room.width - 24;
+  } else if (mode === 'lobby') {
+    minX = interactables[0].x - 150;
+    maxX = interactables[0].x + 150;
+  } else {
+    minX = interactables[0].x - 40;
+    maxX = interactables[interactables.length - 1].x + 40;
+  }
+
+  const groundY = getGroundY(mode);
+  const isOnGround = player.y >= groundY - 0.5;
+  jumpBufferRemaining = Math.max(0, jumpBufferRemaining - dt);
+  const direction = (player.moveRight ? 1 : 0) - (player.moveLeft ? 1 : 0);
+  const drag = isOnGround ? PLAYER_GROUND_DRAG : PLAYER_AIR_DRAG;
+
+  player.velocityX += direction * PLAYER_ACCELERATION * dt;
+  player.velocityX -= player.velocityX * drag * dt;
+  player.velocityX = clamp(player.velocityX, -PLAYER_SPEED, PLAYER_SPEED);
+  if (direction === 0 && Math.abs(player.velocityX) < 3) {
+    player.velocityX = 0;
+  }
+
+  player.x = clamp(player.x + player.velocityX * dt, minX, maxX);
+  if ((player.x <= minX && player.velocityX < 0) || (player.x >= maxX && player.velocityX > 0)) {
+    player.velocityX = 0;
+  }
+
+  if (jumpBufferRemaining > 0 && isOnGround) {
+    player.velocityY = PLAYER_JUMP_VELOCITY;
+    jumpBufferRemaining = 0;
+  }
+
+  player.velocityY += PLAYER_GRAVITY * dt;
+  player.y += player.velocityY * dt;
+  if (player.y > groundY) {
+    player.y = groundY;
+    player.velocityY = 0;
+  }
+}
+
+function syncPlayerPosition(timestamp) {
+  if (!sceneState || !canSyncPlayerPosition || isStairsMenuOpen || isChatPanelOpen || isRoomSettingsOpen || isSystemMessagesOpen || isFriendPanelOpen || isTeleportMenuOpen) {
+    return;
+  }
+
+  const now = timestamp || performance.now();
+  if (now - lastSentPositionAt < POSITION_SYNC_INTERVAL_MS) {
+    return;
+  }
+
+  const x = Math.round(player.x * 100) / 100;
+  const y = Math.round(player.y * 100) / 100;
+  if (lastSentX === x && lastSentY === y) {
+    return;
+  }
+
+  lastSentPositionAt = now;
+  lastSentX = x;
+  lastSentY = y;
+  send('player-move', { x, y });
+}
+
+function frame(timestamp) {
+  const dt = Math.min(0.05, (timestamp - lastFrame) / 1000 || 0);
+  lastFrame = timestamp;
+  updatePlayerPosition(dt);
+  syncPlayerPosition(timestamp);
+  renderScene();
+  requestAnimationFrame(frame);
+}
+
+function simulateHiddenPhysicsTick() {
+  if (!document.hidden) {
+    return;
+  }
+  const now = performance.now();
+  const dt = Math.min(0.1, (now - lastFrame) / 1000 || 0);
+  lastFrame = now;
+  updatePlayerPosition(dt);
+  syncPlayerPosition(now);
+}
+
+function catchUpPhysicsAfterVisibilityRestore() {
+  const now = performance.now();
+  let remaining = Math.min(2, (now - lastFrame) / 1000 || 0);
+  const step = 1 / 60;
+  while (remaining > 0) {
+    const dt = Math.min(step, remaining);
+    updatePlayerPosition(dt);
+    remaining -= dt;
+  }
+  lastFrame = now;
+  syncPlayerPosition(now);
+}
+
+async function init() {
+  resizeCanvas();
+  window.addEventListener('resize', resizeCanvas);
+  requestAnimationFrame(frame);
+  setInterval(simulateHiddenPhysicsTick, HIDDEN_PHYSICS_INTERVAL_MS);
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) {
+      catchUpPhysicsAfterVisibilityRestore();
+    }
+  });
+  window.addEventListener('blur', () => {
+    stopMovement();
+  });
+
+  try {
+    const res = await fetch('/api/layout');
+    layout = await res.json();
+    joinUi.homeFloor = layout.floors?.[0] || 1;
+    joinUi.doorplate = 1;
+    joinUi.areaId = layout.lobbies?.[0]?.id || `floor-${joinUi.homeFloor}`;
+    fillOptions();
+    nameInput.value = joinUi.name;
+    roleSelect.value = joinUi.role;
+    homeFloorSelect.value = String(joinUi.homeFloor);
+    doorplateSelect.value = String(joinUi.doorplate);
+    areaSelect.value = joinUi.areaId;
+    restoreHistoryCheckbox.checked = joinUi.restoreHistory;
+    updateJoinImeInput();
+    updateChatImeInput();
+  } catch (_err) {
+    // Keep graphical login available even when layout API is temporarily unavailable.
+  }
+
+  await loadTextures();
+  await loadSounds();
+
+  const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${protocol}://${window.location.host}`);
+
+  ws.onmessage = e => {
+    const data = JSON.parse(e.data);
+    if (data.type === 'error') {
+      if (data.payload?.message === 'Unknown command') {
+        canSyncPlayerPosition = false;
+        return;
+      }
+      pushCanvasNotice(data.payload.message, true);
+      return;
+    }
+    if (data.type === 'chat') {
+      addMessage(data.payload.sender, data.payload.text, data.payload.sender === 'System');
+      return;
+    }
+    if (data.type === 'chat-history') {
+      renderHistory(data.payload.messages || []);
+      return;
+    }
+    if (data.type === 'info') {
+      pushCanvasNotice(data.payload.message);
+      addMessage('System', data.payload.message, true);
+      return;
+    }
+    if (data.type === 'joined') {
+      const me = data.payload;
+      currentUserId = me.id;
+      isJoined = true;
+      selfInfo.textContent = me.role === 'resident'
+        ? `User: ${me.name} (resident floor ${me.homeFloor}, doorplate ${me.doorplate})`
+        : `User: ${me.name} (visitor)`;
+      joinPanel.classList.add('hidden');
+      chatPanel.classList.remove('hidden');
+      return;
+    }
+    if (data.type === 'state') {
+      syncState(data.payload);
+      return;
+    }
+    if (data.type === 'room-users') {
+      if (sceneState) {
+        sceneState.roomUsers = data.payload?.roomUsers || [];
+      }
+    }
+  };
+
+  roleSelect.addEventListener('change', () => {
+    residentFields.classList.toggle('hidden', roleSelect.value !== 'resident');
+  });
+
+  imeChatInput.addEventListener('compositionstart', () => {
+    isChatComposing = true;
+  });
+
+  imeChatInput.addEventListener('compositionend', () => {
+    isChatComposing = false;
+    chatInputText = imeChatInput.value.slice(0, 120);
+  });
+
+  imeChatInput.addEventListener('input', () => {
+    chatInputText = imeChatInput.value.slice(0, 120);
+    if (imeChatInput.value !== chatInputText) {
+      imeChatInput.value = chatInputText;
+    }
+  });
+
+  joinBtn.addEventListener('click', () => {
+    const payload = {
+      name: nameInput.value,
+      role: roleSelect.value,
+      areaId: areaSelect.value,
+      restoreHistory: restoreHistoryCheckbox.checked
+    };
+    if (roleSelect.value === 'resident') {
+      payload.homeFloor = Number(homeFloorSelect.value);
+      payload.doorplate = Number(doorplateSelect.value);
+    }
+    send('join', payload);
+  });
+
+  imeNameInput.addEventListener('compositionstart', () => {
+    isJoinNameComposing = true;
+  });
+
+  imeNameInput.addEventListener('compositionend', () => {
+    isJoinNameComposing = false;
+    joinUi.name = imeNameInput.value.slice(0, 24);
+  });
+
+  imeNameInput.addEventListener('input', () => {
+    joinUi.name = imeNameInput.value.slice(0, 24);
+    if (imeNameInput.value !== joinUi.name) {
+      imeNameInput.value = joinUi.name;
+    }
+  });
+
+  gameCanvas.addEventListener('click', e => {
+    if (!isJoined || !uiButtons.length) {
+      return;
+    }
+    const rect = gameCanvas.getBoundingClientRect();
+    const scaleX = gameCanvas.width / rect.width;
+    const scaleY = gameCanvas.height / rect.height;
+    const x = (e.clientX - rect.left) * scaleX;
+    const y = (e.clientY - rect.top) * scaleY;
+
+    for (const button of uiButtons) {
+      const insideX = x >= button.x && x <= button.x + button.w;
+      const insideY = y >= button.y && y <= button.y + button.h;
+      if (!insideX || !insideY || button.disabled) {
+        continue;
+      }
+      handleUiButtonClick(button.key);
+      break;
+    }
+  });
+
+  const handlePanelWheel = deltaY => {
+    if (!isJoined) {
+      return false;
+    }
+
+    const delta = deltaY > 0 ? 1 : deltaY < 0 ? -1 : 0;
+    if (!delta) {
+      return false;
+    }
+
+    if (isSystemMessagesOpen) {
+      const list = normalizeSystemMessages(systemMessagesData).slice().reverse();
+      if (!list.length) {
+        return false;
+      }
+      systemMessageIndex = clamp(systemMessageIndex + delta, 0, list.length - 1);
+      systemMessageScrollOffset = ensureIndexVisible(systemMessageIndex, 9, list.length, systemMessageScrollOffset);
+      return true;
+    }
+
+    if (isFriendPanelOpen) {
+      const candidates = getFriendPanelCandidates();
+      if (!candidates.length) {
+        return false;
+      }
+      friendPanelIndex = clamp(friendPanelIndex + delta, 0, candidates.length - 1);
+      friendPanelScrollOffset = ensureIndexVisible(friendPanelIndex, 8, candidates.length, friendPanelScrollOffset);
+      return true;
+    }
+
+    if (isTeleportMenuOpen) {
+      if (!teleportOptions.length) {
+        return false;
+      }
+      teleportIndex = clamp(teleportIndex + delta, 0, teleportOptions.length - 1);
+      teleportScrollOffset = ensureIndexVisible(teleportIndex, 9, teleportOptions.length, teleportScrollOffset);
+      return true;
+    }
+
+    if (isRoomSettingsOpen) {
+      if (!areaUserDirectory.length) {
+        return false;
+      }
+      roomSettingsUserIndex = clamp(roomSettingsUserIndex + delta, 0, areaUserDirectory.length - 1);
+      roomSettingsScrollOffset = ensureIndexVisible(roomSettingsUserIndex, 7, areaUserDirectory.length, roomSettingsScrollOffset);
+      return true;
+    }
+
+    // Allow scrolling chat when chat panel is open OR when chat input has focus
+    if (isChatPanelOpen || (typeof imeChatInput !== 'undefined' && document.activeElement === imeChatInput)) {
+      const maxChatOffset = Math.max(0, chatLog.length - 8);
+      const chatDelta = deltaY > 0 ? -1 : 1;
+      chatPanelScrollOffset = clamp(chatPanelScrollOffset + chatDelta, 0, maxChatOffset);
+      return true;
+    }
+
+    // Inventory scrolling when no other panel is open
+    if (!isSystemMessagesOpen && !isFriendPanelOpen && !isTeleportMenuOpen && !isRoomSettingsOpen && !isChatPanelOpen) {
+      if (inventoryList && inventoryList.length) {
+        inventoryIndex = clamp(inventoryIndex + delta, 0, inventoryList.length - 1);
+        inventoryScrollOffset = ensureIndexVisible(inventoryIndex, INVENTORY_VISIBLE_ROWS, inventoryList.length, inventoryScrollOffset);
+        return true;
+      }
+    }
+
+    return false;
+  };
+
+  gameCanvas.addEventListener('wheel', e => {
+    if (!isJoined) {
+      return;
+    }
+
+    if (handlePanelWheel(e.deltaY)) {
+      e.preventDefault();
+    }
+  }, { passive: false });
+
+  imeChatInput.addEventListener('wheel', e => {
+    if (handlePanelWheel(e.deltaY)) {
+      e.preventDefault();
+    }
+  }, { passive: false });
+
+  // Allow scrolling the DOM messages container with wheel and keep canvas state in sync
+  if (messages) {
+    messages.addEventListener('wheel', e => {
+      if (handlePanelWheel(e.deltaY)) {
+        // update DOM scroll according to chatPanelScrollOffset
+        const rowHeight = 20;
+        const maxChatOffset = Math.max(0, chatLog.length - 8);
+        const offset = clamp(chatPanelScrollOffset, 0, maxChatOffset);
+        if (offset === 0) {
+          messages.scrollTop = messages.scrollHeight;
+        } else {
+          messages.scrollTop = Math.max(0, messages.scrollHeight - offset * rowHeight);
+        }
+        e.preventDefault();
+      }
+    }, { passive: false });
+  }
+
+  window.addEventListener('keydown', e => {
+    if (!isJoined) {
+      if (e.isComposing || isJoinNameComposing) {
+        return;
+      }
+
+      const fields = getJoinFields();
+      clampJoinFocus();
+      const focused = fields[joinUi.focusIndex];
+
+      if (e.key === 'ArrowUp' || e.key === 'Tab' && e.shiftKey) {
+        joinUi.focusIndex = (joinUi.focusIndex - 1 + fields.length) % fields.length;
+        updateJoinImeInput();
+        e.preventDefault();
+        return;
+      }
+      if (e.key === 'ArrowDown' || e.key === 'Tab') {
+        joinUi.focusIndex = (joinUi.focusIndex + 1) % fields.length;
+        updateJoinImeInput();
+        e.preventDefault();
+        return;
+      }
+
+      if (focused?.key === 'name') {
+        return;
+      }
+
+      if (e.key === 'ArrowLeft') {
+        cycleJoinValue(focused?.key, -1);
+        updateJoinImeInput();
+        e.preventDefault();
+        return;
+      }
+      if (e.key === 'ArrowRight') {
+        cycleJoinValue(focused?.key, 1);
+        updateJoinImeInput();
+        e.preventDefault();
+        return;
+      }
+
+      if (focused?.key === 'restoreHistory' && (e.key === ' ' || e.key === 'Enter')) {
+        joinUi.restoreHistory = !joinUi.restoreHistory;
+        e.preventDefault();
+        return;
+      }
+
+      if (focused?.key === 'join' && e.key === 'Enter') {
+        joinFromCanvas();
+        e.preventDefault();
+        return;
+      }
+
+      if (e.key === 'Enter') {
+        if (focused?.type === 'select') {
+          cycleJoinValue(focused.key, 1);
+          e.preventDefault();
+        }
+      }
+      return;
+    }
+
+    if (isChatPanelOpen) {
+      if (e.key === 'Escape') {
+        isChatPanelOpen = false;
+        // leaving agent chat context if any
+        isAgentChat = false;
+        currentAgentId = null;
+        currentAgentName = null;
+        stopMovement();
+        updateChatImeInput();
+        e.preventDefault();
+        return;
+      }
+      if (e.key === 'Enter' && !e.isComposing && !isChatComposing) {
+        const text = chatInputText.trim();
+        if (text) {
+          if (isAgentChat && currentAgentId) {
+            send('agent-chat', { agentId: currentAgentId, text });
+          } else {
+            send('chat', { text });
+          }
+          chatInputText = '';
+          imeChatInput.value = '';
+        }
+        e.preventDefault();
+        return;
+      }
+      return;
+    }
+
+    if (isSystemMessagesOpen) {
+      const messages = normalizeSystemMessages(systemMessagesData).slice().reverse();
+      if (e.key === 'Escape') {
+        closeSystemMessagesPanel();
+        e.preventDefault();
+        return;
+      }
+      if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') {
+        if (messages.length) {
+          systemMessageIndex = (systemMessageIndex - 1 + messages.length) % messages.length;
+          systemMessageScrollOffset = ensureIndexVisible(systemMessageIndex, 9, messages.length, systemMessageScrollOffset);
+        }
+        e.preventDefault();
+        return;
+      }
+      if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') {
+        if (messages.length) {
+          systemMessageIndex = (systemMessageIndex + 1) % messages.length;
+          systemMessageScrollOffset = ensureIndexVisible(systemMessageIndex, 9, messages.length, systemMessageScrollOffset);
+        }
+        e.preventDefault();
+        return;
+      }
+      if ((e.key === 'a' || e.key === 'A') && !e.repeat) {
+        handleSelectedSystemMessageAction('approve');
+        e.preventDefault();
+        return;
+      }
+      if ((e.key === 'd' || e.key === 'D') && !e.repeat) {
+        handleSelectedSystemMessageAction('reject');
+        e.preventDefault();
+        return;
+      }
+      return;
+    }
+
+    if (isFriendPanelOpen) {
+      const candidates = getFriendPanelCandidates();
+      if (e.key === 'Escape') {
+        closeFriendPanel();
+        e.preventDefault();
+        return;
+      }
+      if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') {
+        if (candidates.length) {
+          friendPanelIndex = (friendPanelIndex - 1 + candidates.length) % candidates.length;
+          friendPanelScrollOffset = ensureIndexVisible(friendPanelIndex, 8, candidates.length, friendPanelScrollOffset);
+        }
+        e.preventDefault();
+        return;
+      }
+      if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') {
+        if (candidates.length) {
+          friendPanelIndex = (friendPanelIndex + 1) % candidates.length;
+          friendPanelScrollOffset = ensureIndexVisible(friendPanelIndex, 8, candidates.length, friendPanelScrollOffset);
+        }
+        e.preventDefault();
+        return;
+      }
+      if (e.key === 'Enter') {
+        const selected = candidates[friendPanelIndex];
+        if (selected?.kind === 'player') {
+          sendFriendRequestByName(selected.name);
+        }
+        e.preventDefault();
+        return;
+      }
+      if ((e.key === 'b' || e.key === 'B') && !e.repeat) {
+        const selected = candidates[friendPanelIndex];
+        if (selected?.kind === 'friend') {
+          sendFriendBlockToggleByName(selected.name);
+        }
+        e.preventDefault();
+        return;
+      }
+      if ((e.key === 'n' || e.key === 'N') && !e.repeat) {
+        const targetName = window.prompt('输入要申请好友的昵称：', '');
+        if (targetName) {
+          sendFriendRequestByName(targetName);
+        }
+        e.preventDefault();
+      }
+      return;
+    }
+
+    if (isTeleportMenuOpen) {
+      if (e.key === 'Escape') {
+        closeTeleportMenu();
+        e.preventDefault();
+        return;
+      }
+      if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') {
+        if (teleportOptions.length) {
+          teleportIndex = (teleportIndex - 1 + teleportOptions.length) % teleportOptions.length;
+          teleportScrollOffset = ensureIndexVisible(teleportIndex, 9, teleportOptions.length, teleportScrollOffset);
+        }
+        e.preventDefault();
+        return;
+      }
+      if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') {
+        if (teleportOptions.length) {
+          teleportIndex = (teleportIndex + 1) % teleportOptions.length;
+          teleportScrollOffset = ensureIndexVisible(teleportIndex, 9, teleportOptions.length, teleportScrollOffset);
+        }
+        e.preventDefault();
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'e' || e.key === 'E') {
+        teleportToSelectedOption();
+        closeTeleportMenu();
+        e.preventDefault();
+      }
+      return;
+    }
+
+    if (isRoomSettingsOpen) {
+      if (e.key === 'Escape') {
+        closeRoomSettings();
+        e.preventDefault();
+        return;
+      }
+
+    if ((e.key === TELEPORT_KEY || e.key === TELEPORT_KEY.toLowerCase()) && !e.repeat) {
+      openTeleportMenu();
+      e.preventDefault();
+      return;
+    }
+      if (e.key === 'Tab') {
+        myRoomSettings.defaultAccess = myRoomSettings.defaultAccess === 'deny' ? 'allow' : 'deny';
+        isRoomSettingsDirty = true;
+        e.preventDefault();
+        return;
+      }
+      if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') {
+        if (areaUserDirectory.length) {
+          roomSettingsUserIndex = (roomSettingsUserIndex - 1 + areaUserDirectory.length) % areaUserDirectory.length;
+          roomSettingsScrollOffset = ensureIndexVisible(roomSettingsUserIndex, 7, areaUserDirectory.length, roomSettingsScrollOffset);
+        }
+        e.preventDefault();
+        return;
+      }
+      if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') {
+        if (areaUserDirectory.length) {
+          roomSettingsUserIndex = (roomSettingsUserIndex + 1) % areaUserDirectory.length;
+          roomSettingsScrollOffset = ensureIndexVisible(roomSettingsUserIndex, 7, areaUserDirectory.length, roomSettingsScrollOffset);
+        }
+        e.preventDefault();
+        return;
+      }
+
+      const selected = getSelectedRoomSettingsUser();
+      if ((e.key === 'a' || e.key === 'A') && selected) {
+        toggleRoomSettingsList('whitelist', selected.name);
+        e.preventDefault();
+        return;
+      }
+      if ((e.key === 'd' || e.key === 'D') && selected) {
+        toggleRoomSettingsList('blacklist', selected.name);
+        e.preventDefault();
+        return;
+      }
+      if ((e.key === 'x' || e.key === 'X' || e.key === 'Delete') && selected) {
+        removeRoomSettingsUser(selected.name);
+        e.preventDefault();
+        return;
+      }
+      if (e.key === 'Enter') {
+        saveRoomSettings();
+        closeRoomSettings();
+        e.preventDefault();
+      }
+      return;
+    }
+
+    if (isStairsMenuOpen) {
+      if (e.key === 'Escape') {
+        closeStairsMenu();
+        e.preventDefault();
+        return;
+      }
+      if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') {
+        stairsMenuIndex = (stairsMenuIndex - 1 + stairsMenuOptions.length) % stairsMenuOptions.length;
+        e.preventDefault();
+        return;
+      }
+      if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') {
+        stairsMenuIndex = (stairsMenuIndex + 1) % stairsMenuOptions.length;
+        e.preventDefault();
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'e' || e.key === 'E') {
+        const selected = stairsMenuOptions[stairsMenuIndex];
+        if (selected && selected.areaId !== sceneState?.areaId) {
+          playSound('doorOpen');
+          send('switch-area', { areaId: selected.areaId });
+        }
+        closeStairsMenu();
+        e.preventDefault();
+      }
+      return;
+    }
+
+    if ((e.key === 't' || e.key === 'T') && !e.repeat) {
+      isChatPanelOpen = true;
+      chatPanelScrollOffset = 0;
+      stopMovement();
+      updateChatImeInput();
+      e.preventDefault();
+      return;
+    }
+
+    if ((e.key === 'r' || e.key === 'R') && !e.repeat) {
+      handleClaimNearestRoom();
+      e.preventDefault();
+      return;
+    }
+
+    if ((e.key === 'h' || e.key === 'H') && !e.repeat) {
+      send('clear-history', {});
+      e.preventDefault();
+      return;
+    }
+
+    if (e.key === 'a' || e.key === 'A' || e.key === 'ArrowLeft') {
+      player.moveLeft = true;
+      e.preventDefault();
+      return;
+    }
+    if (e.key === 'd' || e.key === 'D' || e.key === 'ArrowRight') {
+      player.moveRight = true;
+      e.preventDefault();
+      return;
+    }
+    if ((e.key === 'f' || e.key === 'F') && !e.repeat) {
+      // place item when in room and selected item is placeable
+      const mode = getSceneMode();
+      const selected = inventoryList && inventoryList[inventoryIndex];
+      if (mode === 'room' && selected && selected.placeable) {
+        const x = Math.round(player.x * 100) / 100;
+        const y = Math.round(player.y * 100) / 100;
+        send('place-item', { itemId: selected.id, slot: inventoryIndex, x, y });
+        e.preventDefault();
+        return;
+      }
+    }
+    if ((e.key === 'e' || e.key === 'E') && !e.repeat) {
+      // Prefer using selected inventory item over interacting with doors/stairs
+      if (inventoryList && inventoryList.length) {
+        const didUse = useSelectedItem();
+        if (didUse) {
+          e.preventDefault();
+          return;
+        }
+      }
+      handleInteract();
+      e.preventDefault();
+      return;
+    }
+    if ((e.key === 'w' || e.key === 'W' || e.key === 'ArrowUp' || e.code === 'Space') && !e.repeat) {
+      jumpBufferRemaining = JUMP_BUFFER_SECONDS;
+      e.preventDefault();
+      return;
+    }
+  });
+
+  window.addEventListener('keyup', e => {
+    if (e.key === 'a' || e.key === 'A' || e.key === 'ArrowLeft') {
+      player.moveLeft = false;
+      return;
+    }
+    if (e.key === 'd' || e.key === 'D' || e.key === 'ArrowRight') {
+      player.moveRight = false;
+    }
+  });
+}
+
+init();

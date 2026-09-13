@@ -1,0 +1,108 @@
+﻿<!doctype html>
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Floor Chat System</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main class="container">
+      <section id="joinPanel" class="card">
+        <h1 id="titleText">Floor Chat System</h1>
+        <label><span id="nameLabel">User Name</span> <input id="nameInput" /></label>
+
+        <label>
+          <span id="roleLabel">User Role</span>
+          <select id="roleSelect">
+            <option value="visitor" id="roleVisitorText">Visitor</option>
+            <option value="resident" id="roleResidentText">Resident</option>
+          </select>
+        </label>
+
+        <div id="residentFields" class="hidden">
+          <label>
+            <span id="homeFloorLabel">Resident Floor</span>
+            <select id="homeFloorSelect"></select>
+          </label>
+          <label>
+            <span id="doorplateLabel">Doorplate (1-10)</span>
+            <select id="doorplateSelect"></select>
+          </label>
+        </div>
+
+        <label>
+          <span id="startAreaLabel">Start Area</span>
+          <select id="areaSelect"></select>
+        </label>
+
+        <label>
+          <input id="restoreHistoryCheckbox" type="checkbox" checked />
+          <span>Restore last 30 days chat history when entering room</span>
+        </label>
+
+        <button id="joinBtn">Join</button>
+      </section>
+
+      <section id="chatPanel" class="card hidden">
+        <div class="row">
+          <strong id="selfInfo"></strong>
+        </div>
+
+        <div class="row">
+          <label>
+            <span id="switchAreaLabel">Switch Area</span>
+            <select id="switchAreaSelect"></select>
+          </label>
+          <button id="switchAreaBtn">Switch</button>
+        </div>
+
+        <div id="roomPanel" class="row hidden">
+          <label>
+            <span id="insideFloorLabel">Position in Floor</span>
+            <select id="roomSelect"></select>
+          </label>
+          <button id="enterRoomBtn">Enter</button>
+        </div>
+
+        <div id="claimPanel" class="row hidden">
+          <label>
+            <span>Claim Empty Room</span>
+            <select id="claimRoomSelect"></select>
+          </label>
+          <button id="claimRoomBtn">Claim / Move</button>
+        </div>
+
+        <p id="locationInfo"></p>
+
+        <section id="scenePanel" class="scene-panel hidden">
+          <canvas id="gameCanvas" width="960" height="320"></canvas>
+          <p id="sceneHint">Use A/D or ←/→ to move, W/↑/Space to jump, press E to interact.</p>
+        </section>
+
+        <div class="row">
+          <button id="clearHistoryBtn">Clear All Chat History</button>
+        </div>
+
+        <div class="layout">
+          <div>
+            <h3 id="roomUsersTitle">Online Users In Same Room</h3>
+            <ul id="usersList"></ul>
+          </div>
+
+          <div>
+            <h3 id="chatTitle">Chat</h3>
+            <div id="messages" class="messages"></div>
+            <div class="row">
+              <input id="messageInput" placeholder="Message" />
+              <button id="sendBtn">Send</button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script src="client.js"></script>
+  </body>
+</html>

@@ -1,0 +1,507 @@
+﻿const joinPanel = document.getElementById('joinPanel');
+const chatPanel = document.getElementById('chatPanel');
+
+const nameInput = document.getElementById('nameInput');
+const roleSelect = document.getElementById('roleSelect');
+const residentFields = document.getElementById('residentFields');
+const homeFloorSelect = document.getElementById('homeFloorSelect');
+const doorplateSelect = document.getElementById('doorplateSelect');
+const areaSelect = document.getElementById('areaSelect');
+const restoreHistoryCheckbox = document.getElementById('restoreHistoryCheckbox');
+const joinBtn = document.getElementById('joinBtn');
+
+const selfInfo = document.getElementById('selfInfo');
+const locationInfo = document.getElementById('locationInfo');
+const switchAreaSelect = document.getElementById('switchAreaSelect');
+const switchAreaBtn = document.getElementById('switchAreaBtn');
+const roomPanel = document.getElementById('roomPanel');
+const roomSelect = document.getElementById('roomSelect');
+const enterRoomBtn = document.getElementById('enterRoomBtn');
+const claimPanel = document.getElementById('claimPanel');
+const claimRoomSelect = document.getElementById('claimRoomSelect');
+const claimRoomBtn = document.getElementById('claimRoomBtn');
+const clearHistoryBtn = document.getElementById('clearHistoryBtn');
+
+const scenePanel = document.getElementById('scenePanel');
+const gameCanvas = document.getElementById('gameCanvas');
+const sceneHint = document.getElementById('sceneHint');
+const sceneCtx = gameCanvas.getContext('2d');
+
+const usersList = document.getElementById('usersList');
+const messages = document.getElementById('messages');
+const messageInput = document.getElementById('messageInput');
+const sendBtn = document.getElementById('sendBtn');
+
+const TILE_SIZE = 32;
+const DOOR_WIDTH = 32;
+const DOOR_HEIGHT = 64;
+const FLOOR_Y = 208;
+const DOOR_START_X = 80;
+const DOOR_SPACING = 84;
+const PLAYER_SPEED = 190;
+const INTERACT_DISTANCE = 34;
+
+const player = {
+  x: DOOR_START_X,
+  moveLeft: false,
+  moveRight: false
+};
+
+let ws;
+let layout;
+let sceneState = null;
+let textures = {};
+let lastFrame = 0;
+
+function renderHistory(history) {
+  messages.innerHTML = '';
+  history.forEach(m => {
+    addMessage(m.sender, m.text, m.sender === 'System');
+  });
+}
+
+function addMessage(sender, text, isSystem = false) {
+  const item = document.createElement('div');
+  item.className = `msg ${isSystem ? 'sys' : ''}`;
+  item.textContent = `${sender}: ${text}`;
+  messages.appendChild(item);
+  messages.scrollTop = messages.scrollHeight;
+}
+
+function areaName(areaId) {
+  if (areaId === 'lobby-1') return 'Lobby 1';
+  if (areaId === 'lobby-2') return 'Lobby 2';
+  if (areaId.startsWith('floor-')) return `Floor ${areaId.split('-')[1]}`;
+  return areaId;
+}
+
+function roomName(roomId) {
+  if (roomId === 'main') return 'Lobby';
+  if (roomId === 'corridor') return 'Corridor';
+  if (roomId.startsWith('room-')) return `Doorplate ${roomId.split('-')[1]} Room`;
+  return roomId;
+}
+
+function fillOptions() {
+  const areas = [
+    ...layout.lobbies.map(x => ({ value: x.id, label: `${x.name} (cap ${x.capacity})` })),
+    ...layout.floors.map(x => ({
+      value: `floor-${x}`,
+      label: `Floor ${x} (resident ${layout.residentCapacity}/visitor ${layout.visitorCapacity})`
+    }))
+  ];
+
+  [areaSelect, switchAreaSelect].forEach(select => {
+    select.innerHTML = '';
+    areas.forEach(item => {
+      const option = document.createElement('option');
+      option.value = item.value;
+      option.textContent = item.label;
+      select.appendChild(option);
+    });
+  });
+
+  homeFloorSelect.innerHTML = '';
+  layout.floors.forEach(x => {
+    const option = document.createElement('option');
+    option.value = String(x);
+    option.textContent = `Floor ${x}`;
+    homeFloorSelect.appendChild(option);
+  });
+
+  doorplateSelect.innerHTML = '';
+  for (let i = 1; i <= layout.residentCapacity; i += 1) {
+    const option = document.createElement('option');
+    option.value = String(i);
+    option.textContent = String(i);
+    doorplateSelect.appendChild(option);
+  }
+
+  roomSelect.innerHTML = '';
+  const corridorOption = document.createElement('option');
+  corridorOption.value = 'corridor';
+  corridorOption.textContent = 'Corridor';
+  roomSelect.appendChild(corridorOption);
+
+  for (let i = 1; i <= layout.residentCapacity; i += 1) {
+    const option = document.createElement('option');
+    option.value = `room-${i}`;
+    option.textContent = `Doorplate ${i} Room`;
+    roomSelect.appendChild(option);
+  }
+
+  claimRoomSelect.innerHTML = '';
+  for (let i = 1; i <= layout.residentCapacity; i += 1) {
+    const option = document.createElement('option');
+    option.value = String(i);
+    option.textContent = `Doorplate ${i} Room`;
+    claimRoomSelect.appendChild(option);
+  }
+}
+
+function send(type, payload) {
+  if (!ws || ws.readyState !== 1) {
+    return;
+  }
+  ws.send(JSON.stringify({ type, payload }));
+}
+
+function loadImage(src) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
+}
+
+async function loadTextures() {
+  const [floor, wallpaperLower, wallpaperMiddle, wallpaperUpper, door, playerImage] = await Promise.all([
+    loadImage('/textures/floor.png'),
+    loadImage('/textures/wallpaper_lower.png'),
+    loadImage('/textures/wallpaper_middle.png'),
+    loadImage('/textures/wallpaper_upper.png'),
+    loadImage('/textures/door32x64.png'),
+    loadImage('/textures/player.png')
+  ]);
+
+  textures = {
+    floor,
+    wallpaperLower,
+    wallpaperMiddle,
+    wallpaperUpper,
+    door,
+    playerImage
+  };
+}
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function getDoorX(doorplate) {
+  return DOOR_START_X + (doorplate - 1) * DOOR_SPACING;
+}
+
+function getInteractables() {
+  if (!sceneState || !sceneState.canChooseRoom || !layout) {
+    return [];
+  }
+
+  const owners = new Map((sceneState.floorDirectory || []).map(x => [x.doorplate, x.ownerName]));
+  const interactables = [];
+  for (let doorplate = 1; doorplate <= layout.residentCapacity; doorplate += 1) {
+    interactables.push({
+      type: 'room',
+      x: getDoorX(doorplate),
+      roomId: `room-${doorplate}`,
+      doorplate,
+      ownerName: owners.get(doorplate) || 'Empty'
+    });
+  }
+
+  interactables.push({
+    type: 'stairs',
+    x: getDoorX(layout.residentCapacity) + 120,
+    roomId: null,
+    doorplate: null,
+    ownerName: '楼梯间'
+  });
+
+  return interactables;
+}
+
+function getNearestInteractable(interactables) {
+  let nearest = null;
+  let minDistance = Number.POSITIVE_INFINITY;
+
+  for (const item of interactables) {
+    const distance = Math.abs(player.x - item.x);
+    if (distance < minDistance) {
+      minDistance = distance;
+      nearest = item;
+    }
+  }
+
+  if (minDistance > INTERACT_DISTANCE) {
+    return null;
+  }
+  return nearest;
+}
+
+function describeInteractable(item) {
+  if (!item) {
+    return 'Move with A/D or ←/→. Press E near a door or staircase.';
+  }
+  if (item.type === 'stairs') {
+    return 'Press E: Enter staircase and choose floor';
+  }
+  return `Press E: Enter room ${item.doorplate} (${item.ownerName})`;
+}
+
+function handleInteract() {
+  if (!sceneState || !sceneState.canChooseRoom) {
+    return;
+  }
+
+  if (sceneState.roomId !== 'corridor') {
+    send('enter-room', { roomId: 'corridor' });
+    return;
+  }
+
+  const nearest = getNearestInteractable(getInteractables());
+  if (!nearest) {
+    return;
+  }
+
+  if (nearest.type === 'stairs') {
+    const input = window.prompt(`Choose floor (${layout.floors.join(', ')}):`, String(sceneState.floor || layout.floors[0]));
+    if (input === null) {
+      return;
+    }
+    const floor = Number(input);
+    if (!layout.floors.includes(floor)) {
+      alert('Invalid floor number');
+      return;
+    }
+    send('switch-area', { areaId: `floor-${floor}` });
+    return;
+  }
+
+  send('enter-room', { roomId: nearest.roomId });
+}
+
+function drawSprite(image, x, y, width, height, fallback) {
+  if (image) {
+    sceneCtx.drawImage(image, x, y, width, height);
+    return;
+  }
+  sceneCtx.fillStyle = fallback;
+  sceneCtx.fillRect(x, y, width, height);
+}
+
+function drawDoorLabel(text, x, y) {
+  sceneCtx.font = '12px Arial';
+  const paddingX = 6;
+  const width = sceneCtx.measureText(text).width + paddingX * 2;
+  const left = Math.round(x - width / 2);
+  sceneCtx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+  sceneCtx.fillRect(left, y - 14, width, 16);
+  sceneCtx.fillStyle = '#fff';
+  sceneCtx.fillText(text, left + paddingX, y - 2);
+}
+
+function renderScene() {
+  sceneCtx.fillStyle = '#000';
+  sceneCtx.fillRect(0, 0, gameCanvas.width, gameCanvas.height);
+
+  if (!sceneState || !sceneState.canChooseRoom) {
+    sceneCtx.fillStyle = '#fff';
+    sceneCtx.font = '16px Arial';
+    sceneCtx.fillText('Graphical corridor view is available on floors only.', 20, 32);
+    return;
+  }
+
+  const interactables = getInteractables();
+  const nearest = getNearestInteractable(interactables);
+  sceneHint.textContent = describeInteractable(nearest);
+
+  const worldMaxX = interactables[interactables.length - 1].x + 80;
+  const worldWidth = Math.max(gameCanvas.width, worldMaxX + 80);
+  const cameraX = clamp(player.x - gameCanvas.width / 2, 0, worldWidth - gameCanvas.width);
+
+  const tileStart = Math.floor((cameraX - TILE_SIZE) / TILE_SIZE);
+  const tileEnd = Math.ceil((cameraX + gameCanvas.width + TILE_SIZE) / TILE_SIZE);
+
+  for (let i = tileStart; i <= tileEnd; i += 1) {
+    const drawX = i * TILE_SIZE - cameraX;
+    drawSprite(textures.wallpaperUpper, drawX, FLOOR_Y - 96, TILE_SIZE, TILE_SIZE, '#111');
+    drawSprite(textures.wallpaperMiddle, drawX, FLOOR_Y - 64, TILE_SIZE, TILE_SIZE, '#1a1a1a');
+    drawSprite(textures.wallpaperLower, drawX, FLOOR_Y, TILE_SIZE, TILE_SIZE, '#242424');
+    drawSprite(textures.floor, drawX, FLOOR_Y, TILE_SIZE, TILE_SIZE, '#464646');
+  }
+
+  for (const item of interactables) {
+    const drawX = item.x - cameraX - DOOR_WIDTH / 2;
+    drawSprite(textures.door, drawX, FLOOR_Y - (DOOR_HEIGHT - TILE_SIZE), DOOR_WIDTH, DOOR_HEIGHT, '#6b4a2d');
+
+    if (item.type === 'stairs') {
+      drawDoorLabel('楼梯间', item.x - cameraX, FLOOR_Y - 42);
+    } else {
+      drawDoorLabel(`${item.doorplate}: ${item.ownerName}`, item.x - cameraX, FLOOR_Y - 42);
+    }
+  }
+
+  if (nearest) {
+    const drawX = nearest.x - cameraX - DOOR_WIDTH / 2;
+    sceneCtx.strokeStyle = '#ffd54f';
+    sceneCtx.lineWidth = 2;
+    sceneCtx.strokeRect(drawX - 2, FLOOR_Y - (DOOR_HEIGHT - TILE_SIZE) - 2, DOOR_WIDTH + 4, DOOR_HEIGHT + 4);
+  }
+
+  drawSprite(textures.playerImage, player.x - cameraX - 16, FLOOR_Y, 32, 32, '#4ea7ff');
+}
+
+function syncState(state) {
+  sceneState = state;
+  locationInfo.textContent = `Current area: ${areaName(state.areaId)} / ${roomName(state.roomId)}`;
+  roomPanel.classList.toggle('hidden', !state.canChooseRoom);
+  claimPanel.classList.toggle('hidden', !(state.canChooseRoom && state.roomId === 'corridor'));
+  scenePanel.classList.remove('hidden');
+
+  selfInfo.textContent = selfInfo.textContent.split(' | ')[0];
+  if (state.ownedRoom) {
+    const ownedLabel = `Owned room: Floor ${state.ownedRoom.floor}, ${roomName(state.ownedRoom.roomId)}`;
+    selfInfo.textContent = `${selfInfo.textContent.split(' | ')[0]} | ${ownedLabel}`;
+  }
+
+  const roomMatch = /^room-(\d+)$/.exec(state.roomId || '');
+  if (roomMatch) {
+    player.x = getDoorX(Number(roomMatch[1]));
+  }
+
+  usersList.innerHTML = '';
+  state.roomUsers.forEach(u => {
+    const li = document.createElement('li');
+    if (u.role === 'resident') {
+      li.textContent = `${u.name} (resident floor ${u.homeFloor}, doorplate ${u.doorplate})`;
+    } else {
+      li.textContent = `${u.name} (visitor)`;
+    }
+    usersList.appendChild(li);
+  });
+}
+
+function updatePlayerPosition(dt) {
+  if (!sceneState || !sceneState.canChooseRoom || !layout) {
+    return;
+  }
+
+  const interactables = getInteractables();
+  const minX = interactables[0].x - 40;
+  const maxX = interactables[interactables.length - 1].x + 40;
+  const direction = (player.moveRight ? 1 : 0) - (player.moveLeft ? 1 : 0);
+  player.x = clamp(player.x + direction * PLAYER_SPEED * dt, minX, maxX);
+}
+
+function frame(timestamp) {
+  const dt = Math.min(0.05, (timestamp - lastFrame) / 1000 || 0);
+  lastFrame = timestamp;
+  updatePlayerPosition(dt);
+  renderScene();
+  requestAnimationFrame(frame);
+}
+
+async function init() {
+  const res = await fetch('/api/layout');
+  layout = await res.json();
+  fillOptions();
+  await loadTextures();
+  requestAnimationFrame(frame);
+
+  const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${protocol}://${window.location.host}`);
+
+  ws.onmessage = e => {
+    const data = JSON.parse(e.data);
+    if (data.type === 'error') {
+      alert(data.payload.message);
+      return;
+    }
+    if (data.type === 'chat') {
+      addMessage(data.payload.sender, data.payload.text, data.payload.sender === 'System');
+      return;
+    }
+    if (data.type === 'chat-history') {
+      renderHistory(data.payload.messages || []);
+      return;
+    }
+    if (data.type === 'info') {
+      alert(data.payload.message);
+      return;
+    }
+    if (data.type === 'joined') {
+      const me = data.payload;
+      selfInfo.textContent = me.role === 'resident'
+        ? `User: ${me.name} (resident floor ${me.homeFloor}, doorplate ${me.doorplate})`
+        : `User: ${me.name} (visitor)`;
+      joinPanel.classList.add('hidden');
+      chatPanel.classList.remove('hidden');
+      return;
+    }
+    if (data.type === 'state') {
+      syncState(data.payload);
+    }
+  };
+
+  roleSelect.addEventListener('change', () => {
+    residentFields.classList.toggle('hidden', roleSelect.value !== 'resident');
+  });
+
+  joinBtn.addEventListener('click', () => {
+    const payload = {
+      name: nameInput.value,
+      role: roleSelect.value,
+      areaId: areaSelect.value,
+      restoreHistory: restoreHistoryCheckbox.checked
+    };
+    if (roleSelect.value === 'resident') {
+      payload.homeFloor = Number(homeFloorSelect.value);
+      payload.doorplate = Number(doorplateSelect.value);
+    }
+    send('join', payload);
+  });
+
+  switchAreaBtn.addEventListener('click', () => {
+    send('switch-area', { areaId: switchAreaSelect.value });
+  });
+
+  enterRoomBtn.addEventListener('click', () => {
+    send('enter-room', { roomId: roomSelect.value });
+  });
+
+  claimRoomBtn.addEventListener('click', () => {
+    send('claim-room', { doorplate: Number(claimRoomSelect.value) });
+  });
+
+  clearHistoryBtn.addEventListener('click', () => {
+    send('clear-history', {});
+  });
+
+  sendBtn.addEventListener('click', () => {
+    if (!messageInput.value.trim()) {
+      return;
+    }
+    send('chat', { text: messageInput.value });
+    messageInput.value = '';
+  });
+
+  window.addEventListener('keydown', e => {
+    if (e.key === 'a' || e.key === 'A' || e.key === 'ArrowLeft') {
+      player.moveLeft = true;
+      e.preventDefault();
+      return;
+    }
+    if (e.key === 'd' || e.key === 'D' || e.key === 'ArrowRight') {
+      player.moveRight = true;
+      e.preventDefault();
+      return;
+    }
+    if ((e.key === 'e' || e.key === 'E') && !e.repeat) {
+      handleInteract();
+      e.preventDefault();
+    }
+  });
+
+  window.addEventListener('keyup', e => {
+    if (e.key === 'a' || e.key === 'A' || e.key === 'ArrowLeft') {
+      player.moveLeft = false;
+      return;
+    }
+    if (e.key === 'd' || e.key === 'D' || e.key === 'ArrowRight') {
+      player.moveRight = false;
+    }
+  });
+}
+
+init();

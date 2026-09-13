@@ -1,0 +1,2 @@
+E:\NodeConsoleApp2\obj\Debug\NodeConsoleApp2.esproj.CoreCompileInputs.cache
+E:\NodeConsoleApp2 (2)\NodeConsoleApp2\obj\Debug\NodeConsoleApp2.esproj.CoreCompileInputs.cache

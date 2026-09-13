@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#08111a" />
+  <title>知乎公寓 demo</title>
+  <link rel="icon" type="image/png" href="/textures/icon_zhihu.png" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="container">
+    <!-- ================= 登录面板（HTML） ================= -->
+    <section id="joinPanel" class="card join-card">
+      <div class="join-header">
+        <img src="/textures/img_liukanshan.png" alt="刘看山" class="join-avatar" />
+        <h1 id="titleText">知乎公寓 demo(使用桌面端适配更佳哟)</h1>
+      </div>
+
+      <label>
+        <span id="nameLabel">User Name</span>
+        <input id="nameInput" maxlength="24" placeholder="请输入昵称（2-24 字符）" autocomplete="username" />
+      </label>
+
+      <label>
+        <span id="passwordLabel">Password</span>
+        <input id="passwordInput" type="password" maxlength="64" placeholder="请输入密码（至少 6 位）" autocomplete="current-password" />
+      </label>
+
+      <div class="auth-row">
+        <button id="loginBtn" class="auth-btn" type="button">登录</button>
+        <button id="registerBtn" class="auth-btn primary" type="button">注册新账号</button>
+      </div>
+      <p id="authStatus" class="auth-status"></p>
+
+      <label>
+        <span id="roleLabel">User Role</span>
+        <select id="roleSelect">
+          <option value="visitor" id="roleVisitorText">Visitor</option>
+          <option value="resident" id="roleResidentText">Resident</option>
+        </select>
+      </label>
+
+      <div id="residentFields" class="hidden">
+        <label>
+          <span id="homeFloorLabel">Resident Floor</span>
+          <select id="homeFloorSelect"></select>
+        </label>
+        <label>
+          <span id="doorplateLabel">Doorplate (1-10)</span>
+          <select id="doorplateSelect"></select>
+        </label>
+      </div>
+
+      <label>
+        <span id="startAreaLabel">Start Area</span>
+        <select id="areaSelect"></select>
+      </label>
+
+      <label class="checkbox-label">
+        <input id="restoreHistoryCheckbox" type="checkbox" checked />
+        <span>Restore last 30 days chat history when entering room</span>
+      </label>
+
+      <button id="joinBtn">Join</button>
+
+      <!-- ================= 游戏简介（放在加入按钮下方） ================= -->
+      <div class="join-intro">
+        <p class="join-intro-title">关于这个公寓</p>
+        <p class="join-intro-text">
+          欢迎来到「知乎公寓」——一栋 100 层的像素小楼。你可以认领属于自己的房间，
+          和住在走廊另一头的知乎er打个招呼，或者去找刘看山聊聊天。
+        </p>
+        <ul class="join-intro-list">
+          <li><b>探索楼层</b>：从大厅进入楼梯间，前往任意楼层</li>
+          <li><b>认领房间</b>：在走廊按 R 搬进一间空房，换墙纸、摆家具</li>
+          <li><b>结识智能体</b>：按 E 和刘看山对话，他可能会给你些小玩意儿</li>
+          <li><b>结交好友</b>：加好友、传送串门，一键到对方身边</li>
+          <li><b>通关目标</b>：集齐印章与穹顶通行证，登上 101 穹顶看星星</li>
+        </ul>
+        <p class="join-intro-keys">
+          操作：A/D 或 ←/→ 移动 · W/↑/空格 跳跃 · E 交互 · T 聊天 · R 认领房间 · G 传送 · H 清空记录
+        </p>
+      </div>
+    </section>
+
+    <!-- ================= 游戏主面板 ================= -->
+    <section id="chatPanel" class="card hidden">
+      <strong id="selfInfo" class="hidden"></strong>
+      <p id="locationInfo" class="hidden"></p>
+
+      <section id="scenePanel" class="scene-panel">
+        <canvas id="gameCanvas" width="1280" height="720"></canvas>
+
+        <!-- 场景提示（HTML） -->
+        <p id="sceneHint" class="scene-hint"></p>
+
+        <!-- 背包 HUD（HTML） -->
+        <div id="inventoryBox" class="overlay-box inventory-box hidden">
+          <div class="overlay-header">
+            <span class="overlay-title">背包</span>
+            <span class="overlay-hint">滚轮切换 · F 放置 · E 使用</span>
+          </div>
+          <ul id="inventoryListEl" class="overlay-list"></ul>
+        </div>
+
+        <!-- 楼梯菜单（HTML） -->
+        <div id="stairsMenuBox" class="overlay-box stairs-menu-box hidden">
+          <div class="overlay-header">
+            <span class="overlay-title">楼梯间目的地选择</span>
+            <span class="overlay-hint">输入搜索 · ↑/↓ 选择 · Enter 确认 · Esc 取消</span>
+          </div>
+          <div class="overlay-search-row">
+            <input id="stairsMenuSearchInput" class="overlay-search" type="text"
+                   placeholder="搜索楼层 / 大厅，例如 12、Floor 12、Lobby" autocomplete="off" spellcheck="false" />
+            <button id="stairsMenuSearchClear" class="overlay-search-clear" type="button" title="清空">×</button>
+          </div>
+          <ul id="stairsMenuList" class="overlay-list"></ul>
+        </div>
+
+        <!-- 好友面板（HTML） -->
+        <div id="friendPanelBox" class="overlay-box friend-panel-box hidden">
+          <div class="overlay-header">
+            <span class="overlay-title">Friends</span>
+            <span class="overlay-hint">输入昵称加好友 · 点击按钮操作 · Esc 关闭</span>
+          </div>
+          <div class="panel-toolbar">
+            <input id="friendSearchInput" class="overlay-search" type="text"
+                   placeholder="输入昵称申请加好友" autocomplete="off" spellcheck="false" />
+            <button id="friendAddBtn" class="panel-btn primary" type="button">加好友</button>
+          </div>
+          <ul id="friendPanelList" class="overlay-list"></ul>
+        </div>
+
+        <!-- 传送面板（HTML） -->
+        <div id="teleportPanelBox" class="overlay-box teleport-panel-box hidden">
+          <div class="overlay-header">
+            <span class="overlay-title">Teleport</span>
+            <span class="overlay-hint">输入搜索 · ↑/↓ 选择 · Enter 传送 · Esc 关闭</span>
+          </div>
+          <div class="overlay-search-row">
+            <input id="teleportSearchInput" class="overlay-search" type="text"
+                   placeholder="搜索楼层 / 好友，例如 12、Floor 12、Friend" autocomplete="off" spellcheck="false" />
+            <button id="teleportSearchClear" class="overlay-search-clear" type="button" title="清空">×</button>
+          </div>
+          <ul id="teleportPanelList" class="overlay-list"></ul>
+        </div>
+
+        <!-- 房间设置面板（HTML） -->
+        <div id="roomSettingsBox" class="overlay-box room-settings-box hidden">
+          <div class="overlay-header">
+            <span class="overlay-title">my-room-settings</span>
+            <span class="overlay-hint">点击按钮操作 · Esc 关闭</span>
+          </div>
+          <div class="panel-toolbar">
+            <button id="roomSettingsAccessBtn" class="panel-btn" type="button">默认权限：允许</button>
+          </div>
+          <div class="panel-toolbar">
+            <button id="roomSettingsWallpaperPrev" class="panel-btn icon-btn" type="button" title="上一个墙纸">◀</button>
+            <span id="roomSettingsWallpaperLabel" class="panel-label">墙纸：原木（默认）</span>
+            <button id="roomSettingsWallpaperNext" class="panel-btn icon-btn" type="button" title="下一个墙纸">▶</button>
+          </div>
+          <ul id="roomSettingsList" class="overlay-list"></ul>
+          <div class="panel-footer">
+            <button id="roomSettingsSaveBtn" class="panel-btn primary" type="button">保存设置</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= 聊天对话框（HTML） ================= -->
+      <div id="chatBox" class="chat-box hidden">
+        <div class="chat-box-header">
+          <span id="chatBoxTitle">聊天</span>
+          <span class="chat-box-hint">Enter 发送 · Esc 关闭</span>
+          <button id="chatBoxClose" class="chat-box-close" type="button" title="关闭">×</button>
+        </div>
+        <div id="messages" class="chat-messages"></div>
+        <div class="chat-box-input-row">
+          <input id="imeChatInput" class="chat-box-input" maxlength="120" placeholder="输入消息，Enter 发送..." />
+          <button id="chatSendBtn" class="chat-box-send" type="button">发送</button>
+        </div>
+      </div>
+
+      <!-- ================= 系统消息面板（HTML） ================= -->
+      <div id="sysMsgBox" class="sys-msg-box hidden">
+        <div class="sys-msg-header">
+          <span>System Messages</span>
+          <span class="sys-msg-hint">↑/↓ 选择 · A 同意 · D 拒绝 · Esc 关闭</span>
+          <button id="sysMsgClose" class="sys-msg-close" type="button" title="关闭">×</button>
+        </div>
+        <ul id="sysMsgList" class="sys-msg-list"></ul>
+      </div>
+
+      <ul id="usersList" class="hidden"></ul>
+    </section>
+  </main>
+
+  <!-- ================= 触屏虚拟按键（移动端） ================= -->
+  <div id="touchControls" class="touch-controls hidden">
+    <div class="touch-group touch-group-left">
+      <button id="touchLeftBtn" class="touch-btn" type="button" aria-label="向左移动">◀</button>
+      <button id="touchRightBtn" class="touch-btn" type="button" aria-label="向右移动">▶</button>
+    </div>
+    <div class="touch-group touch-group-right">
+      <button id="touchInteractBtn" class="touch-btn touch-btn-accent" type="button" aria-label="交互/使用">E</button>
+      <button id="touchJumpBtn" class="touch-btn" type="button" aria-label="跳跃">↑</button>
+    </div>
+  </div>
+
+  <!-- ================= 全局悬浮层（HTML） ================= -->
+  <div id="toastBox" class="toast-box"></div>
+  <div id="buttonTooltip" class="button-tooltip hidden"></div>
+
+  <script src="client.js"></script>
+</body>
+</html>

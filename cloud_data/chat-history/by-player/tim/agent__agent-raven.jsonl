@@ -1,0 +1,20 @@
+{"areaId":"agent","roomId":"agent-raven","sender":"Tim","text":"你好","timestamp":"2026-09-12T23:43:30.135Z"}
+{"areaId":"agent","roomId":"agent-raven","sender":"Raven","text":"/*没有求知，何来求真。先去找 Nova。*/","timestamp":"2026-09-12T23:43:30.853Z"}
+{"areaId":"agent","roomId":"agent-raven","sender":"Tim","text":"我找过了","timestamp":"2026-09-12T23:43:40.180Z"}
+{"areaId":"agent","roomId":"agent-raven","sender":"Raven","text":"/*没有求知，何来求真。先去找 Nova。*/","timestamp":"2026-09-12T23:43:41.196Z"}
+{"areaId":"agent","roomId":"agent-raven","sender":"System","text":"#sys: 玩家「Tim」向你赠送了物品 seal-knowledge（数量 1）","timestamp":"2026-09-12T23:43:52.419Z"}
+{"areaId":"agent","roomId":"agent-raven","sender":"Raven","text":"印章收到了。求知既至，求真开始。\n\n第一题，数之题：2, 3, 5, 8, 13, ?","timestamp":"2026-09-12T23:43:53.127Z"}
+{"areaId":"agent","roomId":"agent-raven","sender":"Tim","text":"21","timestamp":"2026-09-12T23:43:56.658Z"}
+{"areaId":"agent","roomId":"agent-raven","sender":"Raven","text":"对。第二题，理之题：\n\n一个房间有三盏灯，外面有三个开关，你只能进房一次，如何确认开关与灯的对应关系？","timestamp":"2026-09-12T23:43:57.478Z"}
+{"areaId":"agent","roomId":"agent-raven","sender":"Tim","text":"摸温度","timestamp":"2026-09-12T23:44:03.928Z"}
+{"areaId":"agent","roomId":"agent-raven","sender":"Raven","text":"方向对，说完整些。先怎么做，再怎么做，进房后靠什么判断。","timestamp":"2026-09-12T23:44:04.852Z"}
+{"areaId":"agent","roomId":"agent-raven","sender":"Tim","text":"开一盏关上，开另一盏灯","timestamp":"2026-09-12T23:44:31.781Z"}
+{"areaId":"agent","roomId":"agent-raven","sender":"Raven","text":"对。第三题，问之题：\n\n知乎上有人问——\"为什么很多聪明人一辈子碌碌无为？\"给我一句你自己的答案。","timestamp":"2026-09-12T23:44:32.806Z"}
+{"areaId":"agent","roomId":"agent-raven","sender":"Tim","text":"他们不知道自己选错了方向","timestamp":"2026-09-12T23:44:51.851Z"}
+{"areaId":"agent","roomId":"agent-raven","sender":"Raven","text":"诚恳，够了。\n\n\n\n认真你就赢了。","timestamp":"2026-09-12T23:44:52.877Z"}
+{"areaId":"agent","roomId":"agent-raven","sender":"Tim","text":"hi","timestamp":"2026-09-13T02:40:44.356Z"}
+{"areaId":"agent","roomId":"agent-raven","sender":"Raven","text":"/*没有求知，何来求真。先去找 Nova。*/","timestamp":"2026-09-13T02:40:45.242Z"}
+{"areaId":"agent","roomId":"agent-raven","sender":"Tim","text":"你好","timestamp":"2026-09-13T02:40:57.016Z"}
+{"areaId":"agent","roomId":"agent-raven","sender":"Raven","text":"/*没有求知，何来求真。先去找 Nova。*/","timestamp":"2026-09-13T02:40:57.940Z"}
+{"areaId":"agent","roomId":"agent-raven","sender":"Tim","text":"我已经得到印章了","timestamp":"2026-09-13T02:41:17.906Z"}
+{"areaId":"agent","roomId":"agent-raven","sender":"Raven","text":"印章在你身上，我认。但规矩不变，三题重来。\n\n第一题，数之题：2, 3, 5, 8, 13, ?","timestamp":"2026-09-13T02:41:18.931Z"}

@@ -1,0 +1,65 @@
+﻿<!doctype html>
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Floor Chat System</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main class="container">
+      <section id="joinPanel" class="card hidden">
+        <h1 id="titleText">Floor Chat System</h1>
+        <label><span id="nameLabel">User Name</span> <input id="nameInput" /></label>
+
+        <label>
+          <span id="roleLabel">User Role</span>
+          <select id="roleSelect">
+            <option value="visitor" id="roleVisitorText">Visitor</option>
+            <option value="resident" id="roleResidentText">Resident</option>
+          </select>
+        </label>
+
+        <div id="residentFields" class="hidden">
+          <label>
+            <span id="homeFloorLabel">Resident Floor</span>
+            <select id="homeFloorSelect"></select>
+          </label>
+          <label>
+            <span id="doorplateLabel">Doorplate (1-10)</span>
+            <select id="doorplateSelect"></select>
+          </label>
+        </div>
+
+        <label>
+          <span id="startAreaLabel">Start Area</span>
+          <select id="areaSelect"></select>
+        </label>
+
+        <label>
+          <input id="restoreHistoryCheckbox" type="checkbox" checked />
+          <span>Restore last 30 days chat history when entering room</span>
+        </label>
+
+        <button id="joinBtn">Join</button>
+      </section>
+
+      <section id="chatPanel" class="card">
+        <strong id="selfInfo" class="hidden"></strong>
+        <p id="locationInfo" class="hidden"></p>
+
+        <section id="scenePanel" class="scene-panel">
+          <canvas id="gameCanvas" width="960" height="320"></canvas>
+          <input id="imeNameInput" class="ime-name-input hidden" maxlength="24" placeholder="�������ǳƣ�֧���������룩" />
+          <p id="sceneHint" class="hidden">Use A/D or ��/�� to move, W/��/Space to jump, press E to interact.</p>
+        </section>
+
+        <ul id="usersList" class="hidden"></ul>
+        <div id="messages" class="messages hidden"></div>
+      </section>
+    </main>
+
+    <script src="client.js"></script>
+  </body>
+</html>

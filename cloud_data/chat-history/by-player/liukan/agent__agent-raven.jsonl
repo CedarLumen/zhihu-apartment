@@ -1,0 +1,10 @@
+{"areaId":"agent","roomId":"agent-raven","sender":"System","text":"#sys: 玩家「LiuKan」向你赠送了物品 seal-knowledge（数量 1）","timestamp":"2026-09-12T15:09:50.185Z"}
+{"areaId":"agent","roomId":"agent-raven","sender":"Raven","text":"收到。求知印章，我收下了。","timestamp":"2026-09-12T15:09:50.595Z"}
+{"areaId":"agent","roomId":"agent-raven","sender":"LiuKan","text":"谜题？","timestamp":"2026-09-12T15:09:59.505Z"}
+{"areaId":"agent","roomId":"agent-raven","sender":"Raven","text":"第一题，数之题：2, 3, 5, 8, 13, ?","timestamp":"2026-09-12T15:10:00.225Z"}
+{"areaId":"agent","roomId":"agent-raven","sender":"LiuKan","text":"21","timestamp":"2026-09-12T15:10:02.987Z"}
+{"areaId":"agent","roomId":"agent-raven","sender":"Raven","text":"对。第二题，理之题：一个房间有三盏灯，外面有三个开关，你只能进房一次，如何确认开关与灯的对应关系？","timestamp":"2026-09-12T15:10:04.522Z"}
+{"areaId":"agent","roomId":"agent-raven","sender":"LiuKan","text":"先开一盏灯，一段时间后关上，打开第二盏灯，进入房间，观察，摸温度","timestamp":"2026-09-12T15:10:38.313Z"}
+{"areaId":"agent","roomId":"agent-raven","sender":"Raven","text":"对。第三题，问之题：知乎上有人问——\"为什么很多聪明人一辈子碌碌无为？\"给我一句你自己的答案。","timestamp":"2026-09-12T15:10:39.442Z"}
+{"areaId":"agent","roomId":"agent-raven","sender":"LiuKan","text":"也许，他们想得过于多了","timestamp":"2026-09-12T15:10:54.287Z"}
+{"areaId":"agent","roomId":"agent-raven","sender":"Raven","text":"诚恳。三题全过。\n\n\n\n认真你就赢了。","timestamp":"2026-09-12T15:10:54.904Z"}

@@ -1,0 +1,366 @@
+﻿'use strict';
+
+const path = require('path');
+const http = require('http');
+const express = require('express');
+const { WebSocketServer } = require('ws');
+
+const PORT = process.env.PORT || 3000;
+const FLOOR_COUNT = 5;
+const RESIDENT_CAPACITY = 10;
+const VISITOR_CAPACITY = 20;
+const LOBBY_CAPACITY = 200;
+
+const app = express();
+const server = http.createServer(app);
+const wss = new WebSocketServer({ server });
+
+const clients = new Map();
+let nextUserId = 1;
+
+app.use(express.static(path.join(__dirname, 'public'), {
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.html')) {
+      res.setHeader('Content-Type', 'text/html; charset=gbk');
+    } else if (filePath.endsWith('.js')) {
+      res.setHeader('Content-Type', 'application/javascript; charset=gbk');
+    } else if (filePath.endsWith('.css')) {
+      res.setHeader('Content-Type', 'text/css; charset=gbk');
+    }
+  }
+}));
+
+app.get('/api/layout', (_req, res) => {
+  const floors = Array.from({ length: FLOOR_COUNT }, (_v, i) => i + 1);
+  const lobbies = [
+    { id: 'lobby-1', name: '大厅 1', capacity: LOBBY_CAPACITY },
+    { id: 'lobby-2', name: '大厅 2', capacity: LOBBY_CAPACITY }
+  ];
+  res.json({
+    floors,
+    lobbies,
+    residentCapacity: RESIDENT_CAPACITY,
+    visitorCapacity: VISITOR_CAPACITY,
+    lobbyCapacity: LOBBY_CAPACITY
+  });
+});
+
+function parseArea(areaId) {
+  if (areaId === 'lobby-1' || areaId === 'lobby-2') {
+    return { type: 'lobby', id: areaId };
+  }
+  const match = /^floor-(\d+)$/.exec(areaId);
+  if (!match) {
+    return null;
+  }
+  const floor = Number(match[1]);
+  if (floor < 1 || floor > FLOOR_COUNT) {
+    return null;
+  }
+  return { type: 'floor', id: areaId, floor };
+}
+
+function send(ws, type, payload) {
+  ws.send(JSON.stringify({ type, payload }));
+}
+
+function effectiveRoleOnArea(user, area) {
+  if (area.type !== 'floor') {
+    return 'visitor';
+  }
+  if (user.role === 'resident' && user.homeFloor === area.floor) {
+    return 'resident';
+  }
+  return 'visitor';
+}
+
+function isDoorplateUsedOnHomeFloor(user, targetArea) {
+  for (const other of clients.values()) {
+    if (other.id === user.id) {
+      continue;
+    }
+    const otherArea = parseArea(other.areaId);
+    if (!otherArea || otherArea.type !== 'floor') {
+      continue;
+    }
+    if (other.homeFloor === targetArea.floor && other.role === 'resident' && other.doorplate === user.doorplate) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function canEnterArea(user, targetArea) {
+  if (targetArea.type === 'lobby') {
+    const currentCount = [...clients.values()].filter(u => u.areaId === targetArea.id && u.id !== user.id).length;
+    if (currentCount >= LOBBY_CAPACITY) {
+      return { ok: false, reason: `该大厅已满（最多 ${LOBBY_CAPACITY} 人）` };
+    }
+    return { ok: true };
+  }
+
+  let residentCount = 0;
+  let visitorCount = 0;
+  for (const other of clients.values()) {
+    if (other.id === user.id) {
+      continue;
+    }
+    const area = parseArea(other.areaId);
+    if (!area || area.type !== 'floor' || area.floor !== targetArea.floor) {
+      continue;
+    }
+    if (effectiveRoleOnArea(other, area) === 'resident') {
+      residentCount += 1;
+    } else {
+      visitorCount += 1;
+    }
+  }
+
+  const selfRole = effectiveRoleOnArea(user, targetArea);
+  if (selfRole === 'resident') {
+    if (residentCount >= RESIDENT_CAPACITY) {
+      return { ok: false, reason: `该楼层常驻用户已满（最多 ${RESIDENT_CAPACITY} 人）` };
+    }
+    if (isDoorplateUsedOnHomeFloor(user, targetArea)) {
+      return { ok: false, reason: '该门牌已被使用' };
+    }
+  } else if (visitorCount >= VISITOR_CAPACITY) {
+    return { ok: false, reason: `该楼层访客已满（最多 ${VISITOR_CAPACITY} 人）` };
+  }
+
+  return { ok: true };
+}
+
+function currentRoomUsers(areaId, roomId) {
+  return [...clients.values()]
+    .filter(u => u.areaId === areaId && u.roomId === roomId)
+    .map(u => ({
+      id: u.id,
+      name: u.name,
+      role: u.role,
+      homeFloor: u.homeFloor,
+      doorplate: u.doorplate
+    }));
+}
+
+function pushStateForUser(user) {
+  if (!user.ws || user.ws.readyState !== 1) {
+    return;
+  }
+  const area = parseArea(user.areaId);
+  const roomUsers = currentRoomUsers(user.areaId, user.roomId);
+  send(user.ws, 'state', {
+    areaId: user.areaId,
+    roomId: user.roomId,
+    areaType: area?.type,
+    roomUsers,
+    canChooseRoom: area?.type === 'floor',
+    floor: area?.floor ?? null
+  });
+}
+
+function pushStateForLocation(areaId, roomId) {
+  for (const user of clients.values()) {
+    if (user.areaId === areaId && user.roomId === roomId) {
+      pushStateForUser(user);
+    }
+  }
+}
+
+function notifyRoom(areaId, roomId, text, sender = '系统') {
+  for (const user of clients.values()) {
+    if (user.areaId === areaId && user.roomId === roomId && user.ws.readyState === 1) {
+      send(user.ws, 'chat', {
+        sender,
+        text,
+        timestamp: new Date().toISOString()
+      });
+    }
+  }
+}
+
+function moveUser(user, newAreaId, newRoomId) {
+  const oldAreaId = user.areaId;
+  const oldRoomId = user.roomId;
+  user.areaId = newAreaId;
+  user.roomId = newRoomId;
+
+  if (oldAreaId && oldRoomId) {
+    notifyRoom(oldAreaId, oldRoomId, `${user.name} 已离开`);
+    pushStateForLocation(oldAreaId, oldRoomId);
+  }
+
+  notifyRoom(newAreaId, newRoomId, `${user.name} 已进入`);
+  pushStateForLocation(newAreaId, newRoomId);
+  pushStateForUser(user);
+}
+
+function handleJoin(ws, payload) {
+  const name = String(payload?.name || '').trim();
+  const role = payload?.role === 'resident' ? 'resident' : 'visitor';
+  const areaId = String(payload?.areaId || '').trim();
+  const area = parseArea(areaId);
+
+  if (!name) {
+    send(ws, 'error', { message: '请输入用户名' });
+    return;
+  }
+  if (!area) {
+    send(ws, 'error', { message: '目标区域无效' });
+    return;
+  }
+
+  const user = {
+    id: nextUserId++,
+    ws,
+    name,
+    role,
+    homeFloor: null,
+    doorplate: null,
+    areaId: null,
+    roomId: null
+  };
+
+  if (role === 'resident') {
+    const homeFloor = Number(payload?.homeFloor);
+    const doorplate = Number(payload?.doorplate);
+    if (!Number.isInteger(homeFloor) || homeFloor < 1 || homeFloor > FLOOR_COUNT) {
+      send(ws, 'error', { message: `常驻用户必须选择 1-${FLOOR_COUNT} 的楼层` });
+      return;
+    }
+    if (!Number.isInteger(doorplate) || doorplate < 1 || doorplate > RESIDENT_CAPACITY) {
+      send(ws, 'error', { message: `门牌号必须是 1-${RESIDENT_CAPACITY}` });
+      return;
+    }
+    user.homeFloor = homeFloor;
+    user.doorplate = doorplate;
+  }
+
+  const access = canEnterArea(user, area);
+  if (!access.ok) {
+    send(ws, 'error', { message: access.reason });
+    return;
+  }
+
+  clients.set(ws, user);
+  const defaultRoom = area.type === 'floor' ? 'corridor' : 'main';
+  moveUser(user, area.id, defaultRoom);
+
+  send(ws, 'joined', {
+    id: user.id,
+    name: user.name,
+    role: user.role,
+    homeFloor: user.homeFloor,
+    doorplate: user.doorplate
+  });
+}
+
+function handleSwitchArea(ws, payload) {
+  const user = clients.get(ws);
+  if (!user) {
+    send(ws, 'error', { message: '请先进入系统' });
+    return;
+  }
+  const area = parseArea(String(payload?.areaId || ''));
+  if (!area) {
+    send(ws, 'error', { message: '目标区域无效' });
+    return;
+  }
+
+  const access = canEnterArea(user, area);
+  if (!access.ok) {
+    send(ws, 'error', { message: access.reason });
+    return;
+  }
+
+  const defaultRoom = area.type === 'floor' ? 'corridor' : 'main';
+  moveUser(user, area.id, defaultRoom);
+}
+
+function handleEnterRoom(ws, payload) {
+  const user = clients.get(ws);
+  if (!user) {
+    send(ws, 'error', { message: '请先进入系统' });
+    return;
+  }
+  const area = parseArea(user.areaId);
+  if (!area || area.type !== 'floor') {
+    send(ws, 'error', { message: '大厅中不可进入房间' });
+    return;
+  }
+
+  const roomId = String(payload?.roomId || '');
+  if (roomId === 'corridor') {
+    moveUser(user, user.areaId, 'corridor');
+    return;
+  }
+
+  const match = /^room-(\d+)$/.exec(roomId);
+  if (!match) {
+    send(ws, 'error', { message: '房间无效' });
+    return;
+  }
+
+  const doorplate = Number(match[1]);
+  if (doorplate < 1 || doorplate > RESIDENT_CAPACITY) {
+    send(ws, 'error', { message: '房间无效' });
+    return;
+  }
+
+  moveUser(user, user.areaId, `room-${doorplate}`);
+}
+
+function handleChat(ws, payload) {
+  const user = clients.get(ws);
+  if (!user) {
+    send(ws, 'error', { message: '请先进入系统' });
+    return;
+  }
+  const text = String(payload?.text || '').trim();
+  if (!text) {
+    return;
+  }
+  notifyRoom(user.areaId, user.roomId, text, user.name);
+}
+
+wss.on('connection', ws => {
+  send(ws, 'welcome', { message: '连接成功，请先进入区域' });
+
+  ws.on('message', raw => {
+    let data;
+    try {
+      data = JSON.parse(raw.toString());
+    } catch (_err) {
+      send(ws, 'error', { message: '消息格式错误' });
+      return;
+    }
+
+    const type = data?.type;
+    const payload = data?.payload || {};
+    if (type === 'join') {
+      handleJoin(ws, payload);
+    } else if (type === 'switch-area') {
+      handleSwitchArea(ws, payload);
+    } else if (type === 'enter-room') {
+      handleEnterRoom(ws, payload);
+    } else if (type === 'chat') {
+      handleChat(ws, payload);
+    } else {
+      send(ws, 'error', { message: '未知指令' });
+    }
+  });
+
+  ws.on('close', () => {
+    const user = clients.get(ws);
+    if (!user) {
+      return;
+    }
+    clients.delete(ws);
+    notifyRoom(user.areaId, user.roomId, `${user.name} 已离开`);
+    pushStateForLocation(user.areaId, user.roomId);
+  });
+});
+
+server.listen(PORT, () => {
+  console.log(`Server started at http://localhost:${PORT}`);
+});
